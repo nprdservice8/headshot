@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { before, test } from "node:test";
 import type { World } from "@dimforge/rapier3d-compat";
 import RAPIER from "@dimforge/rapier3d-compat";
-import { STEP_HEIGHT, TICK_RATE, WALK_SPEED } from "./constants.ts";
+import { SPRINT_SPEED, STEP_HEIGHT, TICK_RATE, WALK_SPEED } from "./constants.ts";
 import {
   copyMoveState,
   createMover,
@@ -54,6 +54,15 @@ test("walks forward at walk speed", () => {
   assert.ok(Math.abs(state.x) < 0.01);
 });
 
+test("sprinting increases predicted speed deterministically", () => {
+  const state = createMoveState(0, 0, 0);
+  run(state, 0, 10);
+  for (let i = 0; i < TICK_RATE; i++) stepMovement(mover, state, BUTTON.FORWARD, 0, true);
+  const startZ = state.z;
+  for (let i = 0; i < TICK_RATE; i++) stepMovement(mover, state, BUTTON.FORWARD, 0, true);
+  assert.ok(Math.abs(startZ - state.z - SPRINT_SPEED) < 0.3, `moved ${startZ - state.z}`);
+});
+
 test("yaw turns the forward direction", () => {
   const state = createMoveState(0, 0, 0);
   run(state, 0, 10);
@@ -77,6 +86,16 @@ test("a wall absorbs velocity in the air", () => {
   run(state, 0, 20);
   assert.ok(state.z > -19.5 + 0.3, `z = ${state.z}`);
   assert.ok(Math.abs(state.vz) < 0.5, `vz = ${state.vz}`);
+});
+
+test("overlapping corner walls never admit a capsule wedge", () => {
+  // This mirrors the perimeter construction: two thick colliders overlap rather than merely meet.
+  solidBox(-10.5, 2, 0, 0.75, 2, 11);
+  solidBox(0, 2, -10.5, 11, 2, 0.75);
+  const state = createMoveState(-8, 0, -8);
+  run(state, 0, 10);
+  run(state, BUTTON.FORWARD | BUTTON.LEFT, TICK_RATE * 3, Math.PI / 4);
+  assert.ok(state.x > -10.2 || state.z > -10.2, `wedged into corner x=${state.x}, z=${state.z}`);
 });
 
 test("jumping leaves the ground and lands again", () => {

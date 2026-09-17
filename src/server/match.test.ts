@@ -73,8 +73,17 @@ function input(
   yaw: number,
   pitch: number,
   viewTick = match.tick,
+  weapon = 0,
 ) {
-  const message: InputMessage = { type: "input", seq: ++seq, buttons, yaw, pitch, viewTick };
+  const message: InputMessage = {
+    type: "input",
+    seq: ++seq,
+    buttons,
+    yaw,
+    pitch,
+    viewTick,
+    weapon,
+  };
   queueInput(match, player.id, message);
 }
 
@@ -161,6 +170,24 @@ test("the server enforces the fire rate", () => {
   assert.equal(messagesOfType(sent, "shot").length, 2);
 });
 
+test("bazooka fires a swept straight rocket, splashes, and respects its cooldown", () => {
+  const { match, sent, shooter, target } = setup();
+  place(match, shooter, 8, 10);
+  place(match, target, 8, 4);
+  ticks(match, 20);
+  input(match, shooter, BUTTON.FIRE, 0, aimPitch(shooter, 0.9, 6), match.tick, 2);
+  tickMatch(match);
+  assert.equal(shooter.rockets, 2);
+  assert.equal(match.rockets.length, 1);
+  ticks(match, 12);
+  assert.equal(match.rockets.length, 0);
+  assert.ok(target.hp < MAX_HP, `target hp ${target.hp}`);
+  assert.ok(messagesOfType(sent, "explosion").length > 0);
+  input(match, shooter, BUTTON.FIRE, 0, 0, match.tick, 2);
+  tickMatch(match);
+  assert.equal(match.rockets.length, 0, "bazooka cannot bypass its cooldown");
+});
+
 test("a grenade explodes after its fuse, hurting and pushing nearby players", () => {
   const { match, sent, shooter, target } = setup();
   place(match, shooter, 8, 10);
@@ -219,6 +246,7 @@ test("the input queue ignores replayed seqs and keeps only the newest inputs", (
     yaw: 0,
     pitch: 0,
     viewTick: 0,
+    weapon: 0,
   };
   queueInput(match, shooter.id, replay);
   assert.equal(shooter.inputs.length, 1);

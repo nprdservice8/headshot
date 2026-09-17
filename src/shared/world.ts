@@ -74,14 +74,16 @@ export function ramp(
   };
 }
 
-export const ARENA_HALF_SIZE = 20;
+export const ARENA_HALF_SIZE = 30;
 
 export const ARENA_BOXES: readonly ArenaBox[] = [
   box(0, -0.5, 0, ARENA_HALF_SIZE, 0.5, ARENA_HALF_SIZE, "floor"),
-  box(0, 2.5, -20.5, 21, 2.5, 0.5, "wall"),
-  box(0, 2.5, 20.5, 21, 2.5, 0.5, "wall"),
-  box(-20.5, 2.5, 0, 0.5, 2.5, 21, "wall"),
-  box(20.5, 2.5, 0, 0.5, 2.5, 21, "wall"),
+  // Perimeter walls intentionally overlap at every joint. The overlap is wider than a player
+  // capsule, closing the corner wedge that previously let players hide inside wall geometry.
+  box(0, 2.5, -30.5, 31, 2.5, 0.75, "wall"),
+  box(0, 2.5, 30.5, 31, 2.5, 0.75, "wall"),
+  box(-30.5, 2.5, 0, 0.75, 2.5, 31, "wall"),
+  box(30.5, 2.5, 0, 0.75, 2.5, 31, "wall"),
   // Central platform, reached by two ramps
   box(0, 1, 0, 4, 1, 4, "platform"),
   ramp(0, 8, Math.PI, 4, 2, 3),
@@ -109,6 +111,17 @@ export const ARENA_BOXES: readonly ArenaBox[] = [
   // Pillars
   box(-15, 2, 8, 0.8, 2, 0.8, "pillar"),
   box(15, 2, -4, 0.8, 2, 0.8, "pillar"),
+  // Outer ring: long sightlines are broken by two elevated points of interest and dense cover.
+  box(-22, 1.25, 0, 4, 1.25, 4, "platform"),
+  ramp(-17, 0, -Math.PI / 2, 4, 2.5, 3),
+  box(22, 1.25, 0, 4, 1.25, 4, "platform"),
+  ramp(17, 0, Math.PI / 2, 4, 2.5, 3),
+  box(-23, 1.25, -16, 0.45, 1.25, 4, "cover"),
+  box(23, 1.25, 16, 0.45, 1.25, 4, "cover"),
+  box(-16, 1.25, 23, 4, 1.25, 0.45, "cover"),
+  box(16, 1.25, -23, 4, 1.25, 0.45, "cover"),
+  box(-26, 0.75, 17, 0.75, 0.75, 0.75, "crate"),
+  box(26, 0.75, -17, 0.75, 0.75, 0.75, "crate"),
 ];
 
 function spawn(x: number, y: number, z: number): SpawnPoint {
@@ -124,6 +137,10 @@ export const SPAWN_POINTS: readonly SpawnPoint[] = [
   spawn(0, 0, -17.5),
   spawn(-14, 1.5, -14),
   spawn(14, 1.5, 14),
+  spawn(-26, 0, -22),
+  spawn(26, 0, 22),
+  spawn(-22, 2.5, 0),
+  spawn(22, 2.5, 0),
 ];
 
 /** Yaw around Y followed by tilt around the local X axis. */

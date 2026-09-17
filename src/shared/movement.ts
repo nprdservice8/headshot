@@ -21,6 +21,7 @@ import {
   STEP_MIN_WIDTH,
   TICK_SEC,
   WALK_SPEED,
+  SPRINT_SPEED,
 } from "./constants.ts";
 import { BUTTON } from "./protocol.ts";
 import { collisionGroups } from "./world.ts";
@@ -132,7 +133,13 @@ function resolvePenetration(mover: Mover, state: MoveState): void {
 }
 
 /** Advances one player by exactly one tick. The server and the predicting client both run this. */
-export function stepMovement(mover: Mover, state: MoveState, buttons: number, yaw: number): void {
+export function stepMovement(
+  mover: Mover,
+  state: MoveState,
+  buttons: number,
+  yaw: number,
+  sprinting = false,
+): void {
   let localX = 0;
   let localZ = 0;
   if (buttons & BUTTON.FORWARD) localZ -= 1;
@@ -154,8 +161,9 @@ export function stepMovement(mover: Mover, state: MoveState, buttons: number, ya
   // In the air, letting go of the keys keeps momentum so knockback and jumps carry.
   if (state.grounded || wishLength > 0) {
     const blend = Math.min(1, (state.grounded ? GROUND_ACCEL : AIR_ACCEL) * TICK_SEC);
-    state.vx += (wishX * WALK_SPEED - state.vx) * blend;
-    state.vz += (wishZ * WALK_SPEED - state.vz) * blend;
+    const speed = sprinting ? SPRINT_SPEED : WALK_SPEED;
+    state.vx += (wishX * speed - state.vx) * blend;
+    state.vz += (wishZ * speed - state.vz) * blend;
   }
 
   if (state.grounded && buttons & BUTTON.JUMP) {

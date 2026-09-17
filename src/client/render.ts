@@ -19,6 +19,8 @@ import {
   WebGLRenderer,
 } from "three";
 import {
+  ADS_FOV_DEG,
+  ADS_TRANSITION_PER_SEC,
   FIELD_OF_VIEW_DEG,
   GROUND_COLOR,
   LIGHTMAP_RANGE,
@@ -31,6 +33,7 @@ import {
   SUN_ELEVATION_DEG,
   SUN_INTENSITY,
   WALK_SPEED,
+  SPRINT_FOV_KICK_DEG,
 } from "../shared/constants.ts";
 import { clamp } from "../shared/math.ts";
 import type { Assets } from "./assets.ts";
@@ -76,6 +79,7 @@ let swayX = 0;
 let swayY = 0;
 let lastYaw = 0;
 let lastPitch = 0;
+let cameraFov = FIELD_OF_VIEW_DEG;
 
 const sky = new Mesh(
   new SphereGeometry(SKY_RADIUS, 32, 16),
@@ -205,6 +209,16 @@ export function setViewmodelVisible(visible: boolean): void {
   viewmodel.visible = visible;
 }
 
+/** Smooth ADS/sprint FOV so aiming is responsive without a hard camera pop. */
+export function updateCameraFov(dt: number, ads: boolean, sprinting: boolean): void {
+  const target = ads ? ADS_FOV_DEG : FIELD_OF_VIEW_DEG + (sprinting ? SPRINT_FOV_KICK_DEG : 0);
+  cameraFov += (target - cameraFov) * (1 - Math.exp(-ADS_TRANSITION_PER_SEC * dt));
+  if (Math.abs(camera.fov - cameraFov) > 0.01) {
+    camera.fov = cameraFov;
+    camera.updateProjectionMatrix();
+  }
+}
+
 function syncViewmodelCamera(): void {
   viewmodelCamera.position.copy(camera.position);
   viewmodelCamera.quaternion.copy(camera.quaternion);
@@ -227,6 +241,7 @@ export function updateViewmodel(
   grounded: boolean,
   yaw: number,
   pitch: number,
+  ads: boolean,
 ): void {
   viewmodelKick *= Math.exp(-VIEWMODEL_RECOVERY_PER_SEC * dt);
   const moving = grounded && dt > 0 ? clamp(distanceMoved / dt / WALK_SPEED, 0, 1) : 0;
@@ -236,9 +251,14 @@ export function updateViewmodel(
   if (turn > Math.PI) turn -= 2 * Math.PI;
   if (turn < -Math.PI) turn += 2 * Math.PI;
   const recover = Math.exp(-VIEWMODEL_SWAY_RECOVERY_PER_SEC * dt);
-  swayX = clamp(swayX * recover + turn * VIEWMODEL_SWAY, -VIEWMODEL_SWAY_MAX, VIEWMODEL_SWAY_MAX);
+  const swayScale = ads ? 0.35 : 1;
+  swayX = clamp(
+    swayX * recover + turn * VIEWMODEL_SWAY * swayScale,
+    -VIEWMODEL_SWAY_MAX,
+    VIEWMODEL_SWAY_MAX,
+  );
   swayY = clamp(
-    swayY * recover - (pitch - lastPitch) * VIEWMODEL_SWAY,
+    swayY * recover - (pitch - lastPitch) * VIEWMODEL_SWAY * swayScale,
     -VIEWMODEL_SWAY_MAX,
     VIEWMODEL_SWAY_MAX,
   );
@@ -261,6 +281,13 @@ export function updateGrenadeView(id: number, x: number, y: number, z: number): 
   }
   view?.position.set(x, y, z);
   seenGrenades.add(id);
+}
+
+/** Rockets reuse the lightweight projectile mesh but are smaller and visually distinct in motion. */
+export function updateRocketView(id: number, x: number, y: number, z: number): void {
+  updateGrenadeView(-id, x, y, z);
+  const view = grenadeViews.get(-id);
+  if (view) view.scale.setScalar(0.55);
 }
 
 /** Call once per frame after all updateGrenadeView calls. */

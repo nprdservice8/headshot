@@ -13,6 +13,8 @@ const KEY_BUTTONS: Readonly<Record<string, number>> = {
   ArrowRight: BUTTON.RIGHT,
   Space: BUTTON.JUMP,
   KeyG: BUTTON.GRENADE,
+  ShiftLeft: BUTTON.SPRINT,
+  ShiftRight: BUTTON.SPRINT,
 };
 
 /** Where the player is looking. Mouse movement updates it immediately, every frame. */
@@ -22,6 +24,7 @@ let heldButtons = 0;
 // Buttons pressed since the last tick, so a tap shorter than one tick still registers.
 let tappedButtons = 0;
 let scoreboardHeld = false;
+let selectedWeapon = 0;
 
 export function isPointerLocked(): boolean {
   return document.pointerLockElement !== null;
@@ -61,6 +64,11 @@ export function initInput(canvas: HTMLCanvasElement, canPlay: () => boolean): vo
       scoreboardHeld = true;
       return;
     }
+    if (isPointerLocked() && event.code >= "Digit1" && event.code <= "Digit3") {
+      selectedWeapon = Number(event.code.slice(-1)) - 1;
+      event.preventDefault();
+      return;
+    }
     const button = KEY_BUTTONS[event.code];
     if (button === undefined || !isPointerLocked()) return;
     event.preventDefault();
@@ -74,10 +82,22 @@ export function initInput(canvas: HTMLCanvasElement, canPlay: () => boolean): vo
 
   window.addEventListener("mousedown", (event) => {
     if (event.button === 0 && isPointerLocked()) press(BUTTON.FIRE);
+    if (event.button === 2 && isPointerLocked()) press(BUTTON.ADS);
   });
   window.addEventListener("mouseup", (event) => {
     if (event.button === 0) heldButtons &= ~BUTTON.FIRE;
+    if (event.button === 2) heldButtons &= ~BUTTON.ADS;
   });
+  canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+  canvas.addEventListener(
+    "wheel",
+    (event) => {
+      if (!isPointerLocked()) return;
+      event.preventDefault();
+      selectedWeapon = (selectedWeapon + (event.deltaY > 0 ? 1 : 2)) % 3;
+    },
+    { passive: false },
+  );
 
   document.addEventListener("mousemove", (event) => {
     if (!isPointerLocked()) return;
@@ -91,6 +111,11 @@ export function consumeButtons(): number {
   const buttons = heldButtons | tappedButtons;
   tappedButtons = 0;
   return buttons;
+}
+
+/** The selected loadout slot persists between ticks and is replicated with every input. */
+export function currentWeapon(): number {
+  return selectedWeapon;
 }
 
 export function isScoreboardHeld(): boolean {

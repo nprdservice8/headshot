@@ -11,6 +11,7 @@ import {
 import { clamp, lerp, lerpAngle } from "../shared/math.ts";
 import { copyMoveState, createMoveState, type Mover, stepMovement } from "../shared/movement.ts";
 import {
+  BUTTON,
   type ClientMessage,
   type DeathMessage,
   decodeServerMessage,
@@ -37,7 +38,16 @@ export type NetHandlers = {
 /** Events that happen in the world, shown when the delayed view of other players reaches them. */
 export type WorldEvent = ShotMessage | DeathMessage | ExplosionMessage;
 
-export const self = { id: -1, alive: false, hp: 0, grenades: 0 };
+export const self = {
+  id: -1,
+  alive: false,
+  hp: 0,
+  grenades: 0,
+  rockets: 0,
+  weapon: 0,
+  ads: false,
+  sprinting: false,
+};
 
 /** The local player: `predicted` is the latest tick, `previous` the one before, for smooth rendering. */
 export const predicted = createMoveState(0, 0, 0);
@@ -54,6 +64,7 @@ let inputSeq = 0;
 const pendingSeq = new Int32Array(MAX_PENDING_INPUTS);
 const pendingButtons = new Uint8Array(MAX_PENDING_INPUTS);
 const pendingYaw = new Float64Array(MAX_PENDING_INPUTS);
+const pendingSprint = new Uint8Array(MAX_PENDING_INPUTS);
 let pendingStart = 0;
 let pendingCount = 0;
 
@@ -160,6 +171,10 @@ function reconcile(snapshot: SnapshotMessage): void {
   self.alive = you.alive;
   self.hp = you.hp;
   self.grenades = you.grenades;
+  self.rockets = you.rockets;
+  self.weapon = you.weapon;
+  self.ads = you.ads;
+  self.sprinting = you.sprinting;
 
   while (pendingCount > 0 && (pendingSeq[pendingStart] ?? 0) <= snapshot.ack) {
     pendingStart = (pendingStart + 1) % MAX_PENDING_INPUTS;
@@ -176,7 +191,13 @@ function reconcile(snapshot: SnapshotMessage): void {
   if (you.alive) {
     for (let i = 0; i < pendingCount; i++) {
       const index = (pendingStart + i) % MAX_PENDING_INPUTS;
-      stepMovement(mover, predicted, pendingButtons[index] ?? 0, pendingYaw[index] ?? 0);
+      stepMovement(
+        mover,
+        predicted,
+        pendingButtons[index] ?? 0,
+        pendingYaw[index] ?? 0,
+        pendingSprint[index] === 1,
+      );
     }
   } else {
     pendingCount = 0;
@@ -211,6 +232,7 @@ export function sendInputAndPredict(
   buttons: number,
   yaw: number,
   pitch: number,
+  weapon: number,
   nowMs: number,
 ): void {
   if (!mover || self.id === -1 || socket?.readyState !== WebSocket.OPEN) return;
@@ -222,11 +244,18 @@ export function sendInputAndPredict(
     yaw,
     pitch,
     viewTick: Math.max(0, renderTick(nowMs)),
+    weapon,
   });
   if (!self.alive) return;
 
   copyMoveState(predicted, previous);
-  stepMovement(mover, predicted, buttons, yaw);
+  stepMovement(
+    mover,
+    predicted,
+    buttons,
+    yaw,
+    (buttons & BUTTON.SPRINT) !== 0 && (buttons & BUTTON.ADS) === 0,
+  );
   if (pendingCount === MAX_PENDING_INPUTS) {
     pendingStart = (pendingStart + 1) % MAX_PENDING_INPUTS;
     pendingCount--;
@@ -235,6 +264,7 @@ export function sendInputAndPredict(
   pendingSeq[index] = inputSeq;
   pendingButtons[index] = buttons;
   pendingYaw[index] = yaw;
+  pendingSprint[index] = (buttons & BUTTON.SPRINT) !== 0 && (buttons & BUTTON.ADS) === 0 ? 1 : 0;
   pendingCount++;
 }
 
@@ -319,6 +349,17 @@ export function forEachGrenade(
   if (!bracket(tick) || !older || !newer) return;
   for (const to of newer.grenades) {
     const from = findById(older.grenades, to.id) ?? to;
+    visit(to.id, lerp(from.x, to.x, blend), lerp(from.y, to.y, blend), lerp(from.z, to.z, blend));
+  }
+}
+
+export function forEachRocket(
+  tick: number,
+  visit: (id: number, x: number, y: number, z: number) => void,
+): void {
+  if (!bracket(tick) || !older || !newer) return;
+  for (const to of newer.rockets) {
+    const from = findById(older.rockets, to.id) ?? to;
     visit(to.id, lerp(from.x, to.x, blend), lerp(from.y, to.y, blend), lerp(from.z, to.z, blend));
   }
 }

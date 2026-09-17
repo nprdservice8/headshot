@@ -318,7 +318,11 @@
       border-radius: 50%;
       background: #ffffff;
       box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.8), 0 0 10px rgba(255, 255, 255, 0.8);
+      transition: transform 0.14s ease, opacity 0.14s ease;
     }
+
+    #crosshair.ads { transform: scale(0.58); }
+    #crosshair.sprinting { opacity: 0.35; transform: scale(1.65); }
 
     /* Hitmarker */
     #hitmarker {
@@ -389,6 +393,26 @@
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
       min-width: 220px;
     }
+
+    #weapon-panel {
+      position: absolute;
+      right: 28px;
+      bottom: 24px;
+      min-width: 220px;
+      padding: 13px 16px;
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      background: var(--panel);
+      backdrop-filter: blur(14px);
+      text-align: right;
+    }
+    #weapon-name { font-family: "Chakra Petch", sans-serif; font-weight: 900; letter-spacing: .11em; color: var(--accent); }
+    #weapon-ammo { margin-left: 10px; color: var(--muted); font: 700 12px "Chakra Petch", sans-serif; }
+    #weapon-slots { display: flex; justify-content: flex-end; gap: 5px; margin-top: 9px; }
+    .weapon-slot { padding: 3px 7px; border: 1px solid rgba(255,255,255,.16); border-radius: 5px; color: var(--muted); font: 700 11px "Chakra Petch", sans-serif; }
+    .weapon-slot.selected { color: var(--text); border-color: var(--cyan); background: rgba(0,240,255,.14); box-shadow: 0 0 10px var(--cyan-glow); }
+    #minimap { position: absolute; right: 28px; top: 24px; width: 108px; height: 108px; border: 1px solid var(--panel-border); border-radius: 50%; background: radial-gradient(circle, rgba(0,240,255,.16) 0 2px, transparent 3px), linear-gradient(45deg, transparent 48%, rgba(255,255,255,.08) 49% 51%, transparent 52%), var(--panel); box-shadow: inset 0 0 24px var(--panel-glow); }
+    #minimap::after { content: "TACTICAL MAP"; position: absolute; width: 100%; top: 43px; text-align: center; color: var(--muted); font: 700 9px "Chakra Petch", sans-serif; letter-spacing: .08em; }
 
     .stats-row {
       display: flex;
@@ -755,6 +779,12 @@
       </div>
     </div>
 
+    <div id="weapon-panel">
+      <span id="weapon-name">RIFLE</span><span id="weapon-ammo">∞ AMMO</span>
+      <div id="weapon-slots"><span class="weapon-slot selected" data-weapon="0">1 RFL</span><span class="weapon-slot" data-weapon="1">2 SMG</span><span class="weapon-slot" data-weapon="2">3 RPG</span></div>
+    </div>
+    <div id="minimap" aria-label="Tactical minimap"></div>
+
     <ul id="kill-feed"></ul>
     <div id="center-message"></div>
     <div id="click-to-play">Click to play</div>
@@ -811,6 +841,12 @@
             </div>
             <div class="control-row"><span class="control-label">Fire Weapon</span>
               <div><kbd>L-Click</kbd></div>
+            </div>
+            <div class="control-row"><span class="control-label">ADS / Sprint</span>
+              <div><kbd>R-Click</kbd><kbd>Shift</kbd></div>
+            </div>
+            <div class="control-row"><span class="control-label">Weapon Select</span>
+              <div><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></div>
             </div>
             <div class="control-row"><span class="control-label">Jump</span>
               <div><kbd>Space</kbd></div>

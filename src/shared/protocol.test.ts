@@ -17,6 +17,7 @@ const validInput: InputMessage = {
   yaw: 1.5,
   pitch: -0.3,
   viewTick: 1234.5,
+  weapon: 0,
 };
 
 test("input messages round-trip", () => {
@@ -47,7 +48,7 @@ test("rejects malformed client messages", () => {
     '{"type":"join","name":7}',
     JSON.stringify({ ...validInput, seq: -1 }),
     JSON.stringify({ ...validInput, seq: 1.5 }),
-    JSON.stringify({ ...validInput, buttons: 128 }),
+    JSON.stringify({ ...validInput, buttons: 512 }),
     JSON.stringify({ ...validInput, buttons: "1" }),
     JSON.stringify({ ...validInput, yaw: 10 }),
     JSON.stringify({ ...validInput, pitch: 2 }),
