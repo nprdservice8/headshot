@@ -25,3 +25,8 @@ logs
 
 /graphify-out
 .claude
+
+# Art pipeline downloads and intermediate files (npm run art)
+/art/source
+/art/out
+__pycache__

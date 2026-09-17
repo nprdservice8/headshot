@@ -3,7 +3,7 @@ import RAPIER from "@dimforge/rapier3d-compat";
 import { GROUP_ALL, GROUP_WORLD, TICK_SEC, WORLD_GRAVITY } from "./constants.ts";
 
 /** A solid box. `yaw` turns it around Y, then `tilt` leans it around its own X axis (for ramps). */
-export type ArenaBox = {
+export type SolidBox = {
   x: number;
   y: number;
   z: number;
@@ -12,24 +12,37 @@ export type ArenaBox = {
   hz: number;
   yaw: number;
   tilt: number;
-  color: number;
 };
+
+/** What a box is, which decides how the map builder (art/map.py) dresses it. */
+export type ArenaKind =
+  | "floor"
+  | "wall"
+  | "platform"
+  | "ramp"
+  | "cover"
+  | "crate"
+  | "step"
+  | "pillar";
+
+export type ArenaBox = SolidBox & { kind: ArenaKind };
 
 export type SpawnPoint = { x: number; y: number; z: number; yaw: number };
 
 export type Quat = { x: number; y: number; z: number; w: number };
 
-const COLOR_FLOOR = 0x6d7480;
-const COLOR_WALL = 0x3d4756;
-const COLOR_PLATFORM = 0xb9824f;
-const COLOR_RAMP = 0xd8a24a;
-const COLOR_COVER = 0x4f79a8;
-const COLOR_CRATE = 0x9c6b3c;
-const COLOR_PILLAR = 0x8a93a3;
 const RAMP_THICKNESS = 0.3;
 
-function box(x: number, y: number, z: number, hx: number, hy: number, hz: number, color: number) {
-  return { x, y, z, hx, hy, hz, yaw: 0, tilt: 0, color };
+function box(
+  x: number,
+  y: number,
+  z: number,
+  hx: number,
+  hy: number,
+  hz: number,
+  kind: ArenaKind,
+): ArenaBox {
+  return { x, y, z, hx, hy, hz, yaw: 0, tilt: 0, kind };
 }
 
 /** A ramp whose top surface starts on the ground at (x, z) and rises `height` over `length` toward `yaw`. */
@@ -40,7 +53,7 @@ export function ramp(
   length: number,
   height: number,
   width: number,
-) {
+): ArenaBox {
   const tilt = -Math.atan2(height, length);
   const hy = RAMP_THICKNESS / 2;
   // Box centre = middle of the top surface, pushed down along the surface normal by half the thickness.
@@ -57,45 +70,45 @@ export function ramp(
     hz: Math.hypot(length, height) / 2,
     yaw,
     tilt,
-    color: COLOR_RAMP,
+    kind: "ramp",
   };
 }
 
 export const ARENA_HALF_SIZE = 20;
 
 export const ARENA_BOXES: readonly ArenaBox[] = [
-  box(0, -0.5, 0, ARENA_HALF_SIZE, 0.5, ARENA_HALF_SIZE, COLOR_FLOOR),
-  box(0, 2.5, -20.5, 21, 2.5, 0.5, COLOR_WALL),
-  box(0, 2.5, 20.5, 21, 2.5, 0.5, COLOR_WALL),
-  box(-20.5, 2.5, 0, 0.5, 2.5, 21, COLOR_WALL),
-  box(20.5, 2.5, 0, 0.5, 2.5, 21, COLOR_WALL),
+  box(0, -0.5, 0, ARENA_HALF_SIZE, 0.5, ARENA_HALF_SIZE, "floor"),
+  box(0, 2.5, -20.5, 21, 2.5, 0.5, "wall"),
+  box(0, 2.5, 20.5, 21, 2.5, 0.5, "wall"),
+  box(-20.5, 2.5, 0, 0.5, 2.5, 21, "wall"),
+  box(20.5, 2.5, 0, 0.5, 2.5, 21, "wall"),
   // Central platform, reached by two ramps
-  box(0, 1, 0, 4, 1, 4, COLOR_PLATFORM),
+  box(0, 1, 0, 4, 1, 4, "platform"),
   ramp(0, 8, Math.PI, 4, 2, 3),
   ramp(0, -8, 0, 4, 2, 3),
   // Corner platforms
-  box(-14, 0.75, -14, 4, 0.75, 4, COLOR_PLATFORM),
+  box(-14, 0.75, -14, 4, 0.75, 4, "platform"),
   ramp(-7, -14, -Math.PI / 2, 3, 1.5, 2.5),
-  box(14, 0.75, 14, 4, 0.75, 4, COLOR_PLATFORM),
+  box(14, 0.75, 14, 4, 0.75, 4, "platform"),
   ramp(7, 14, Math.PI / 2, 3, 1.5, 2.5),
   // Cover walls
-  box(-10, 1.25, 6, 0.4, 1.25, 3, COLOR_COVER),
-  box(10, 1.25, -6, 0.4, 1.25, 3, COLOR_COVER),
-  box(6, 1.25, 12, 3, 1.25, 0.4, COLOR_COVER),
-  box(-6, 1.25, -12, 3, 1.25, 0.4, COLOR_COVER),
-  { ...box(0, 1, 14, 1.5, 1, 0.4, COLOR_COVER), yaw: 0.6 },
-  { ...box(0, 1, -14.5, 1.5, 1, 0.4, COLOR_COVER), yaw: -0.6 },
+  box(-10, 1.25, 6, 0.4, 1.25, 3, "cover"),
+  box(10, 1.25, -6, 0.4, 1.25, 3, "cover"),
+  box(6, 1.25, 12, 3, 1.25, 0.4, "cover"),
+  box(-6, 1.25, -12, 3, 1.25, 0.4, "cover"),
+  { ...box(0, 1, 14, 1.5, 1, 0.4, "cover"), yaw: 0.6 },
+  { ...box(0, 1, -14.5, 1.5, 1, 0.4, "cover"), yaw: -0.6 },
   // Crates
-  box(12, 0.6, 4, 0.6, 0.6, 0.6, COLOR_CRATE),
-  box(-12, 0.6, -4, 0.6, 0.6, 0.6, COLOR_CRATE),
-  box(4, 0.6, -16, 0.6, 0.6, 0.6, COLOR_CRATE),
-  box(-4, 0.6, 16, 0.6, 0.6, 0.6, COLOR_CRATE),
+  box(12, 0.6, 4, 0.6, 0.6, 0.6, "crate"),
+  box(-12, 0.6, -4, 0.6, 0.6, 0.6, "crate"),
+  box(4, 0.6, -16, 0.6, 0.6, 0.6, "crate"),
+  box(-4, 0.6, 16, 0.6, 0.6, 0.6, "crate"),
   // Low steps the player walks up without jumping
-  box(15, 0.15, -13, 2, 0.15, 2, COLOR_PLATFORM),
-  box(15, 0.45, -13, 1.2, 0.15, 1.2, COLOR_PLATFORM),
+  box(15, 0.15, -13, 2, 0.15, 2, "step"),
+  box(15, 0.45, -13, 1.2, 0.15, 1.2, "step"),
   // Pillars
-  box(-15, 2, 8, 0.8, 2, 0.8, COLOR_PILLAR),
-  box(15, 2, -4, 0.8, 2, 0.8, COLOR_PILLAR),
+  box(-15, 2, 8, 0.8, 2, 0.8, "pillar"),
+  box(15, 2, -4, 0.8, 2, 0.8, "pillar"),
 ];
 
 function spawn(x: number, y: number, z: number): SpawnPoint {
@@ -140,7 +153,7 @@ export function createArenaWorld(): World {
   return world;
 }
 
-export function addSolidBox(world: World, b: ArenaBox): void {
+export function addSolidBox(world: World, b: SolidBox): void {
   world.createCollider(
     RAPIER.ColliderDesc.cuboid(b.hx, b.hy, b.hz)
       .setTranslation(b.x, b.y, b.z)

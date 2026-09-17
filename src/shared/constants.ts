@@ -88,6 +88,22 @@ export const GROUP_GRENADE = 4;
 export const GROUP_RAGDOLL = 8;
 export const GROUP_ALL = 0xffff;
 
+// Lighting. art/map.py bakes the map's lightmap with these, and the live lights on players and
+// weapons use the same values, so moving and static things look lit by the same sun and sky.
+// Azimuth is measured from +Z towards +X.
+export const SUN_AZIMUTH_DEG = 35;
+export const SUN_ELEVATION_DEG = 48;
+export const SUN_COLOR = 0xfff0d8;
+export const SUN_INTENSITY = 3;
+export const SKY_ZENITH_COLOR = 0x6d9bd6;
+export const SKY_HORIZON_COLOR = 0xd4e2ee;
+export const GROUND_COLOR = 0x7a7064;
+export const SKY_INTENSITY = 1.3;
+/** Baked light is divided by this to fit 8-bit storage and multiplied back when drawn. */
+export const LIGHTMAP_RANGE = 4;
+/** The same for scenery, whose lit colour is baked into vertex colours. */
+export const SCENERY_LIGHT_RANGE = 2;
+
 // Client feel and visuals
 export const MOUSE_SENSITIVITY = 0.0022;
 export const FIELD_OF_VIEW_DEG = 80;

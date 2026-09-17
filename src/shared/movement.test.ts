@@ -18,7 +18,7 @@ let world: World;
 let mover: Mover;
 
 function solidBox(x: number, y: number, z: number, hx: number, hy: number, hz: number) {
-  addSolidBox(world, { x, y, z, hx, hy, hz, yaw: 0, tilt: 0, color: 0 });
+  addSolidBox(world, { x, y, z, hx, hy, hz, yaw: 0, tilt: 0 });
 }
 
 // A private test course, so arena layout changes never break these tests.

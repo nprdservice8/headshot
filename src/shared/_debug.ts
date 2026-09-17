@@ -6,7 +6,7 @@ import { addSolidBox, ramp } from "./world.ts";
 await RAPIER.init();
 const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
 const box = (x: number, y: number, z: number, hx: number, hy: number, hz: number) =>
-  addSolidBox(world, { x, y, z, hx, hy, hz, yaw: 0, tilt: 0, color: 0 });
+  addSolidBox(world, { x, y, z, hx, hy, hz, yaw: 0, tilt: 0 });
 box(0, -0.5, 0, 100, 0.5, 100);
 box(0, 2, -20, 5, 2, 0.5);
 box(20, 0.15, -12, 2, 0.15, 4);
