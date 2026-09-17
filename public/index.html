@@ -1,270 +1,836 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Headshot</title>
-    <link rel="icon" href="data:," />
-    <link rel="modulepreload" href="/dist/game.js" />
-    <style>
-      :root {
-        --panel: rgba(12, 16, 24, 0.82);
-        --text: #f2f4f8;
-        --muted: #a9b2c3;
-        --accent: #ffcf4a;
-        --danger: #ff4d4d;
-        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-        color: var(--text);
-      }
-      * {
-        box-sizing: border-box;
-      }
-      html,
-      body {
-        margin: 0;
-        height: 100%;
-        overflow: hidden;
-        background: #0c1018;
-        user-select: none;
-      }
-      #game {
-        position: fixed;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        display: block;
-      }
-      [hidden] {
-        /* biome-ignore lint/complexity/noImportantStyles: `hidden` must beat the id rules that set display. */
-        display: none !important;
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Headshot - 3D Tactical FPS</title>
+  <link rel="icon" href="data:," />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700;900&family=Outfit:wght@400;600;700;900&display=swap"
+    rel="stylesheet" />
+  <link rel="modulepreload" href="/dist/game.js" />
+  <style>
+    :root {
+      --panel: rgba(10, 14, 23, 0.75);
+      --panel-border: rgba(255, 255, 255, 0.12);
+      --panel-glow: rgba(0, 240, 255, 0.15);
+      --text: #f2f5fb;
+      --muted: #94a3b8;
+      --accent: #ffcf4a;
+      --accent-glow: rgba(255, 207, 74, 0.4);
+      --cyan: #00f0ff;
+      --cyan-glow: rgba(0, 240, 255, 0.35);
+      --danger: #ff4d4d;
+      --danger-glow: rgba(255, 77, 77, 0.5);
+      --hp-color: var(--cyan);
+      font-family: "Outfit", system-ui, -apple-system, sans-serif;
+      color: var(--text);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #070a0f;
+      user-select: none;
+    }
+
+    #game {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    [hidden] {
+      /* biome-ignore lint/complexity/noImportantStyles: `hidden` must beat the id rules that set display. */
+      display: none !important;
+    }
+
+    /* Main Menu Overlay */
+    #menu {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-content: center;
+      padding: 16px;
+      gap: 20px;
+      text-align: center;
+      background: radial-gradient(circle at 50% 40%, rgba(15, 23, 42, 0.85), rgba(4, 7, 13, 0.98));
+      backdrop-filter: blur(20px);
+      z-index: 100;
+      overflow-y: auto;
+    }
+
+    .menu-card {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), inset 0 0 40px var(--panel-glow);
+      border-radius: 24px;
+      padding: clamp(24px, 5vh, 40px) clamp(24px, 5vw, 44px);
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      width: min(680px, 94vw);
+      max-height: calc(100vh - 32px);
+      overflow-y: auto;
+    }
+
+    .menu-header {
+      text-align: center;
+    }
+
+    .menu-subtitle {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-family: "Chakra Petch", sans-serif;
+      font-size: 13px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    .menu-body {
+      display: grid;
+      grid-template-columns: 1fr 1.1fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    .menu-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      text-align: left;
+    }
+
+    .input-label {
+      font-family: "Chakra Petch", sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      color: var(--cyan);
+      text-transform: uppercase;
+    }
+
+    .right-panel {
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 16px 20px;
+    }
+
+    .controls-title {
+      font-family: "Chakra Petch", sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .controls-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .control-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .control-label {
+      font-family: "Outfit", sans-serif;
+    }
+
+    #menu h1 {
+      margin: 0;
+      font-family: "Chakra Petch", sans-serif;
+      font-size: clamp(38px, 7vw, 64px);
+      letter-spacing: 0.12em;
+      font-weight: 900;
+      text-transform: uppercase;
+      color: #ffffff;
+      text-shadow: 0 0 25px rgba(255, 255, 255, 0.2);
+      line-height: 1;
+    }
+
+    #menu h1 span {
+      background: linear-gradient(135deg, var(--accent), var(--cyan));
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 0 15px var(--accent-glow));
+    }
+
+    #menu input {
+      font: inherit;
+      font-size: 16px;
+      font-weight: 600;
+      padding: 12px 16px;
+      border-radius: 12px;
+      border: 1px solid var(--panel-border);
+      background: rgba(15, 23, 42, 0.6);
+      color: var(--text);
+      width: 100%;
+      outline: none;
+      transition: all 0.2s ease;
+      text-align: left;
+    }
+
+    #menu input:focus {
+      border-color: var(--cyan);
+      box-shadow: 0 0 20px var(--cyan-glow);
+      background: rgba(15, 23, 42, 0.9);
+    }
+
+    #menu button {
+      font-family: "Chakra Petch", sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 13px 20px;
+      border-radius: 12px;
+      border: none;
+      background: linear-gradient(135deg, #ffcf4a, #f59e0b);
+      color: #0b0f19;
+      width: 100%;
+      cursor: pointer;
+      box-shadow: 0 8px 25px var(--accent-glow);
+      transition: all 0.2s ease;
+    }
+
+    #menu button:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px rgba(255, 207, 74, 0.6);
+      filter: brightness(1.1);
+    }
+
+    #menu button:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    #menu button:disabled {
+      opacity: 0.5;
+      cursor: wait;
+      filter: grayscale(0.6);
+    }
+
+    #menu-status {
+      min-height: 1.4em;
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    kbd {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+      border-radius: 5px;
+      padding: 2px 6px;
+      font-family: "Chakra Petch", monospace;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent);
+      display: inline-block;
+    }
+
+    @media (max-width: 640px) {
+      .menu-body {
+        grid-template-columns: 1fr;
+        gap: 16px;
       }
 
-      #menu {
-        position: fixed;
-        inset: 0;
-        display: grid;
-        place-content: center;
-        gap: 14px;
-        text-align: center;
-        background: radial-gradient(circle at 50% 40%, rgba(20, 28, 44, 0.75), rgba(6, 8, 12, 0.95));
+      .menu-card {
+        padding: 20px 18px;
+        border-radius: 18px;
       }
-      #menu h1 {
-        margin: 0 0 8px;
-        font-size: clamp(40px, 9vw, 84px);
-        letter-spacing: 0.08em;
-        font-weight: 900;
+    }
+
+    @media (max-width: 480px) {
+      .menu-card {
+        padding: 24px 18px;
+        gap: 12px;
+        border-radius: 16px;
       }
-      #menu h1 span {
-        color: var(--accent);
-      }
-      #menu input,
-      #menu button {
-        font: inherit;
-        font-size: 18px;
+
+      #stats {
+        left: 12px;
+        bottom: 12px;
         padding: 12px 16px;
-        border-radius: 8px;
-        border: 1px solid #3a4458;
-        width: min(320px, 80vw);
+        min-width: 170px;
       }
-      #menu input {
-        background: #141a26;
-        color: var(--text);
+
+      #hp {
+        font-size: 32px;
       }
-      #menu button {
-        background: var(--accent);
-        color: #14110a;
-        font-weight: 800;
-        border: none;
-        cursor: pointer;
+
+      #kill-feed {
+        top: 12px;
+        right: 12px;
       }
-      #menu button:disabled {
-        opacity: 0.6;
-        cursor: wait;
+    }
+
+    @media (max-height: 620px) {
+      .menu-card {
+        padding: 16px 24px;
+        gap: 10px;
       }
-      #menu-status {
-        min-height: 1.4em;
-        margin: 0;
-        color: var(--muted);
-      }
+
       .controls {
-        margin: 12px 0 0;
-        color: var(--muted);
-        font-size: 14px;
-        max-width: 520px;
+        font-size: 11px;
         line-height: 1.6;
       }
+    }
 
-      #hud {
-        position: fixed;
-        inset: 0;
-        pointer-events: none;
-      }
-      #crosshair {
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        width: 4px;
-        height: 4px;
-        margin: -2px 0 0 -2px;
-        border-radius: 50%;
-        background: #fff;
-        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7);
-      }
-      #hitmarker {
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        width: 22px;
-        height: 22px;
-        margin: -11px 0 0 -11px;
-        opacity: 0;
-        background:
-          linear-gradient(45deg, transparent 45%, #fff 45%, #fff 55%, transparent 55%),
-          linear-gradient(-45deg, transparent 45%, #fff 45%, #fff 55%, transparent 55%);
-      }
-      #hitmarker.head {
-        filter: drop-shadow(0 0 3px var(--danger)) sepia(1) saturate(8) hue-rotate(-30deg);
-      }
-      #damage-flash {
-        position: absolute;
-        inset: 0;
-        opacity: 0;
-        box-shadow: inset 0 0 120px 30px rgba(255, 0, 0, 0.55);
-      }
-      #stats {
-        position: absolute;
-        left: 24px;
-        bottom: 20px;
-        display: flex;
-        gap: 18px;
-        align-items: baseline;
-        font-weight: 800;
-        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
-      }
-      #hp {
-        font-size: 44px;
-      }
-      #stats small {
-        font-size: 16px;
-        color: var(--muted);
-        margin-left: 4px;
-      }
-      #grenades {
-        font-size: 28px;
-      }
-      #kill-feed {
-        position: absolute;
-        top: 16px;
-        right: 16px;
-        margin: 0;
-        padding: 0;
-        list-style: none;
-        display: grid;
-        gap: 6px;
-        justify-items: end;
-      }
-      #kill-feed li {
-        background: var(--panel);
-        padding: 6px 10px;
-        border-radius: 6px;
-        font-size: 15px;
-      }
-      #kill-feed .icon {
-        margin: 0 8px;
-        color: var(--accent);
-      }
-      #center-message {
-        position: absolute;
-        top: 30%;
-        width: 100%;
-        text-align: center;
-        font-size: 30px;
-        font-weight: 800;
-        text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
-      }
-      #click-to-play {
-        position: absolute;
-        top: 58%;
-        width: 100%;
-        text-align: center;
-        font-size: 20px;
-        color: var(--accent);
-        text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
-      }
-      #scoreboard {
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        min-width: min(460px, 92vw);
-        background: var(--panel);
-        border-radius: 10px;
-        padding: 14px 18px;
-      }
-      #scoreboard table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 17px;
-      }
-      #scoreboard th {
-        text-align: left;
-        color: var(--muted);
-        font-weight: 600;
-        padding-bottom: 8px;
-      }
-      #scoreboard td,
-      #scoreboard th {
-        padding: 5px 8px;
-      }
-      #scoreboard .number {
-        text-align: right;
-        width: 70px;
-      }
-      #scoreboard tr.me td {
-        color: var(--accent);
-        font-weight: 700;
-      }
-    </style>
-  </head>
-  <body>
-    <canvas id="game"></canvas>
+    /* HUD Elements */
+    #hud {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
 
-    <div id="hud" hidden>
-      <div id="crosshair"></div>
-      <div id="hitmarker"></div>
-      <div id="damage-flash"></div>
-      <div id="stats">
-        <span><span id="hp">100</span><small>HP</small></span>
-        <span><span id="grenades">2</span><small>grenades</small></span>
+    /* Dynamic Crosshair */
+    #crosshair {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 6px;
+      height: 6px;
+      margin: -3px 0 0 -3px;
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.8), 0 0 10px rgba(255, 255, 255, 0.8);
+    }
+
+    /* Hitmarker */
+    #hitmarker {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 26px;
+      height: 26px;
+      margin: -13px 0 0 -13px;
+      opacity: 0;
+      background:
+        linear-gradient(45deg, transparent 45%, #fff 45%, #fff 55%, transparent 55%),
+        linear-gradient(-45deg, transparent 45%, #fff 45%, #fff 55%, transparent 55%);
+      filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.9));
+    }
+
+    #hitmarker.head {
+      filter: drop-shadow(0 0 8px var(--danger)) sepia(1) saturate(10) hue-rotate(-30deg);
+    }
+
+    /* Damage Flash */
+    #damage-flash {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      box-shadow: inset 0 0 150px 40px rgba(255, 0, 0, 0.65);
+      background: radial-gradient(circle, transparent 60%, rgba(255, 0, 0, 0.25));
+    }
+
+    /* Low HP Critical Vignette Pulse */
+    #critical-vignette {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      box-shadow: inset 0 0 140px 40px rgba(255, 0, 0, 0.7);
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    #critical-vignette.active {
+      opacity: 1;
+      animation: critical-pulse 1.2s ease-in-out infinite alternate;
+    }
+
+    @keyframes critical-pulse {
+      from {
+        opacity: 0.35;
+      }
+
+      to {
+        opacity: 0.85;
+      }
+    }
+
+    /* Tactical Stats Card (Bottom Left) */
+    #stats {
+      position: absolute;
+      left: 28px;
+      bottom: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 16px 22px;
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      backdrop-filter: blur(14px);
+      border-radius: 14px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      min-width: 220px;
+    }
+
+    .stats-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .hp-container {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      font-family: "Chakra Petch", sans-serif;
+      font-weight: 700;
+    }
+
+    #hp {
+      font-size: 42px;
+      line-height: 1;
+      color: var(--hp-color);
+      text-shadow: 0 0 15px var(--hp-color);
+      transition: color 0.3s ease;
+    }
+
+    .hp-label {
+      font-size: 14px;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .hp-bar-track {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    #hp-bar-fill {
+      height: 100%;
+      width: 100%;
+      background: var(--hp-color);
+      box-shadow: 0 0 10px var(--hp-color);
+      transition: width 0.3s ease, background 0.3s ease;
+      border-radius: 4px;
+    }
+
+    .grenades-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: "Chakra Petch", sans-serif;
+      font-weight: 700;
+    }
+
+    .grenade-badge {
+      background: rgba(255, 207, 74, 0.15);
+      border: 1px solid rgba(255, 207, 74, 0.3);
+      border-radius: 8px;
+      padding: 4px 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--accent);
+    }
+
+    #grenades {
+      font-size: 22px;
+    }
+
+    /* Kill Feed (Top Right) */
+    #kill-feed {
+      position: absolute;
+      top: 20px;
+      right: 24px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: flex-end;
+    }
+
+    #kill-feed li {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-left: 3px solid var(--accent);
+      backdrop-filter: blur(12px);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+      animation: kill-feed-slide 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      align-items: center;
+    }
+
+    @keyframes kill-feed-slide {
+      from {
+        opacity: 0;
+        transform: translateX(30px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    #kill-feed .icon {
+      margin: 0 8px;
+      color: var(--accent);
+      font-size: 16px;
+    }
+
+    /* Center Messages */
+    #center-message {
+      position: absolute;
+      top: 28%;
+      width: 100%;
+      text-align: center;
+      font-family: "Chakra Petch", sans-serif;
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: #ffffff;
+      text-shadow: 0 0 20px rgba(0, 0, 0, 0.9), 0 0 30px var(--accent-glow);
+    }
+
+    #click-to-play {
+      position: absolute;
+      top: 56%;
+      width: 100%;
+      text-align: center;
+      font-family: "Chakra Petch", sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      text-shadow: 0 0 15px var(--accent-glow);
+      animation: pulse-prompt 1.8s ease-in-out infinite alternate;
+    }
+
+    @keyframes pulse-prompt {
+      from {
+        opacity: 0.7;
+        transform: scale(0.98);
+      }
+
+      to {
+        opacity: 1;
+        transform: scale(1.02);
+      }
+    }
+
+    /* Scoreboard Modal */
+    #scoreboard {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      min-width: min(520px, 92vw);
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      backdrop-filter: blur(20px);
+      border-radius: 16px;
+      padding: 24px 28px;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), inset 0 0 30px var(--panel-glow);
+    }
+
+    #scoreboard-header {
+      font-family: "Chakra Petch", sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--panel-border);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    #scoreboard table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 16px;
+    }
+
+    #scoreboard th {
+      text-align: left;
+      color: var(--muted);
+      font-family: "Chakra Petch", sans-serif;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding-bottom: 10px;
+      font-size: 13px;
+    }
+
+    #scoreboard td,
+    #scoreboard th {
+      padding: 8px 12px;
+    }
+
+    #scoreboard tbody tr {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      transition: background 0.15s ease;
+    }
+
+    #scoreboard tbody tr:last-child {
+      border-bottom: none;
+    }
+
+    #scoreboard .number {
+      text-align: right;
+      width: 80px;
+      font-family: "Chakra Petch", sans-serif;
+      font-weight: 700;
+    }
+
+    #scoreboard tr.me {
+      background: rgba(255, 207, 74, 0.12);
+      border-radius: 6px;
+    }
+
+    #scoreboard tr.me td {
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    /* Pause Menu */
+    #pause-menu {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-content: center;
+      background: rgba(4, 7, 13, 0.75);
+      backdrop-filter: blur(14px);
+      z-index: 50;
+      pointer-events: auto;
+    }
+
+    .pause-card {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), inset 0 0 30px var(--panel-glow);
+      border-radius: 20px;
+      padding: 36px 44px;
+      display: grid;
+      gap: 16px;
+      place-items: center;
+      width: min(380px, 90vw);
+      text-align: center;
+    }
+
+    .pause-card h2 {
+      margin: 0;
+      font-family: "Chakra Petch", sans-serif;
+      font-size: 34px;
+      letter-spacing: 0.12em;
+      font-weight: 900;
+      text-transform: uppercase;
+      color: var(--accent);
+      text-shadow: 0 0 20px var(--accent-glow);
+    }
+
+    .pause-card button {
+      font-family: "Chakra Petch", sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 12px 20px;
+      border-radius: 10px;
+      border: none;
+      background: linear-gradient(135deg, #ffcf4a, #f59e0b);
+      color: #0b0f19;
+      width: 100%;
+      cursor: pointer;
+      box-shadow: 0 6px 20px var(--accent-glow);
+      transition: all 0.2s ease;
+    }
+
+    .pause-card button:hover {
+      transform: translateY(-2px);
+      filter: brightness(1.1);
+    }
+
+    .pause-card button.secondary {
+      background: rgba(255, 77, 77, 0.15);
+      border: 1px solid rgba(255, 77, 77, 0.4);
+      color: var(--danger);
+      box-shadow: 0 4px 15px rgba(255, 77, 77, 0.2);
+    }
+
+    /* 360° Directional Damage / Shot Indicator Ring */
+    #damage-indicators {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 220px;
+      height: 220px;
+      margin-left: -110px;
+      margin-top: -110px;
+      pointer-events: none;
+    }
+
+    .damage-indicator-arc {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      transform-origin: center center;
+      transition: opacity 1.2s cubic-bezier(0.1, 0.8, 0.2, 1);
+    }
+
+    .damage-indicator-arc::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 12px solid transparent;
+      border-right: 12px solid transparent;
+      border-top: 24px solid #ff3344;
+      filter: drop-shadow(0 0 14px rgba(255, 51, 68, 0.9));
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud" hidden>
+    <div id="crosshair"></div>
+    <div id="hitmarker"></div>
+    <div id="damage-flash"></div>
+    <div id="critical-vignette"></div>
+    <div id="damage-indicators"></div>
+
+    <div id="stats">
+      <div class="stats-row">
+        <div class="hp-container">
+          <span id="hp">100</span>
+          <span class="hp-label">HP</span>
+        </div>
+        <div class="grenades-container">
+          <div class="grenade-badge">
+            <span>💣</span>
+            <span id="grenades">2</span>
+          </div>
+        </div>
       </div>
-      <ul id="kill-feed"></ul>
-      <div id="center-message"></div>
-      <div id="click-to-play">Click to play</div>
-      <div id="scoreboard" hidden>
-        <table>
-          <thead>
-            <tr>
-              <th>Player</th>
-              <th class="number">Kills</th>
-              <th class="number">Deaths</th>
-            </tr>
-          </thead>
-          <tbody id="scoreboard-rows"></tbody>
-        </table>
+      <div class="hp-bar-track">
+        <div id="hp-bar-fill"></div>
       </div>
     </div>
 
-    <form id="menu">
-      <h1>HEAD<span>SHOT</span></h1>
-      <input id="name" maxlength="16" autocomplete="off" placeholder="Your name" required />
-      <button id="play" type="submit" disabled>Loading…</button>
-      <p id="menu-status"></p>
-      <p class="controls">
-        WASD move · Mouse aim · Click shoot · Space jump · G grenade · Hold Tab for scores · Esc
-        frees the mouse
-      </p>
-    </form>
+    <ul id="kill-feed"></ul>
+    <div id="center-message"></div>
+    <div id="click-to-play">Click to play</div>
 
-    <script type="module" src="/dist/game.js"></script>
-  </body>
+    <div id="pause-menu" hidden>
+      <div class="pause-card">
+        <h2>PAUSED</h2>
+        <button id="resume-btn" type="button">Resume Game</button>
+        <button id="exit-btn" type="button" class="secondary">Exit to Menu</button>
+      </div>
+    </div>
+
+    <div id="scoreboard" hidden>
+      <div id="scoreboard-header">
+        <span>Match Leaderboard</span>
+        <span>Target: 15 Kills</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th class="number">Kills</th>
+            <th class="number">Deaths</th>
+          </tr>
+        </thead>
+        <tbody id="scoreboard-rows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <form id="menu">
+    <div class="menu-card">
+      <div class="menu-header">
+        <h1>HEAD<span>SHOT</span></h1>
+        <p class="menu-subtitle">Tactical 3D Multiplayer FPS</p>
+      </div>
+
+      <div class="menu-body">
+        <div class="menu-panel left-panel">
+          <label for="name" class="input-label">OPERATIVE CALLSIGN</label>
+          <input id="name" maxlength="16" autocomplete="off" placeholder="Enter callsign" required />
+          <button id="play" type="submit" disabled>Loading…</button>
+          <p id="menu-status"></p>
+        </div>
+
+        <div class="menu-panel right-panel">
+          <div class="controls-title">CONTROLS &amp; SHORTCUTS</div>
+          <div class="controls-list">
+            <div class="control-row"><span class="control-label">Move</span>
+              <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div>
+            </div>
+            <div class="control-row"><span class="control-label">Aim / Look</span>
+              <div><kbd>Mouse</kbd></div>
+            </div>
+            <div class="control-row"><span class="control-label">Fire Weapon</span>
+              <div><kbd>L-Click</kbd></div>
+            </div>
+            <div class="control-row"><span class="control-label">Jump</span>
+              <div><kbd>Space</kbd></div>
+            </div>
+            <div class="control-row"><span class="control-label">Grenade</span>
+              <div><kbd>G</kbd></div>
+            </div>
+            <div class="control-row"><span class="control-label">Leaderboard</span>
+              <div><kbd>Tab</kbd></div>
+            </div>
+            <div class="control-row"><span class="control-label">Pause / Unlock</span>
+              <div><kbd>Esc</kbd></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  <script type="module" src="/dist/game.js"></script>
+</body>
+
 </html>

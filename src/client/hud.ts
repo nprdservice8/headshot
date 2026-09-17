@@ -16,9 +16,15 @@ const hp = getElement("hp", HTMLSpanElement);
 const grenades = getElement("grenades", HTMLSpanElement);
 const hitmarker = getElement("hitmarker", HTMLDivElement);
 const damageFlash = getElement("damage-flash", HTMLDivElement);
+const criticalVignette = getElement("critical-vignette", HTMLDivElement);
+const damageIndicators = getElement("damage-indicators", HTMLDivElement);
+const hpBarFill = getElement("hp-bar-fill", HTMLDivElement);
 const killFeed = getElement("kill-feed", HTMLUListElement);
 const centerMessage = getElement("center-message", HTMLDivElement);
 const clickToPlay = getElement("click-to-play", HTMLDivElement);
+const pauseMenu = getElement("pause-menu", HTMLDivElement);
+const resumeBtn = getElement("resume-btn", HTMLButtonElement);
+const exitBtn = getElement("exit-btn", HTMLButtonElement);
 const scoreboard = getElement("scoreboard", HTMLDivElement);
 const scoreboardRows = getElement("scoreboard-rows", HTMLTableSectionElement);
 
@@ -29,6 +35,17 @@ let shownHp = -1;
 let shownGrenades = -1;
 let shownCenterMessage = "";
 
+export function showDirectionalIndicator(angleRad: number): void {
+  const arc = document.createElement("div");
+  arc.className = "damage-indicator-arc";
+  arc.style.transform = `rotate(${angleRad}rad)`;
+  damageIndicators.append(arc);
+  requestAnimationFrame(() => {
+    arc.style.opacity = "0";
+  });
+  setTimeout(() => arc.remove(), 1200);
+}
+
 export function onPlay(handler: (name: string) => void, savedName: string): void {
   nameInput.value = savedName;
   menu.addEventListener("submit", (event) => {
@@ -36,6 +53,21 @@ export function onPlay(handler: (name: string) => void, savedName: string): void
     const name = nameInput.value.trim();
     if (name.length > 0) handler(name);
   });
+}
+
+export function onResume(handler: () => void): void {
+  resumeBtn.addEventListener("click", handler);
+}
+
+export function onExit(handler: () => void): void {
+  exitBtn.addEventListener("click", handler);
+}
+
+export function setPauseVisible(visible: boolean): void {
+  pauseMenu.hidden = !visible;
+  if (visible) {
+    clickToPlay.hidden = true;
+  }
 }
 
 export function setMenuReady(): void {
@@ -49,6 +81,7 @@ export function setMenuStatus(status: string): void {
 
 export function showMenu(status: string): void {
   setMenuStatus(status);
+  criticalVignette.classList.remove("active");
   menu.hidden = false;
   hud.hidden = true;
 }
@@ -63,6 +96,13 @@ export function setHealth(value: number): void {
   if (value < shownHp && shownHp > 0) flash(damageFlash);
   shownHp = value;
   hp.textContent = String(value);
+
+  const clampedHp = Math.max(0, Math.min(100, value));
+  hpBarFill.style.width = `${clampedHp}%`;
+
+  const color = clampedHp > 50 ? "var(--cyan)" : clampedHp > 25 ? "var(--accent)" : "var(--danger)";
+  document.documentElement.style.setProperty("--hp-color", color);
+  criticalVignette.classList.toggle("active", clampedHp <= 25);
 }
 
 export function setGrenades(value: number): void {

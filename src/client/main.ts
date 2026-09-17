@@ -71,6 +71,21 @@ initInput(canvas, () => joined);
 hud.onPlay(play, readSavedName());
 hud.setMenuReady();
 
+hud.onResume(() => {
+  requestPointerLock(canvas);
+});
+
+hud.onExit(() => {
+  location.reload();
+});
+
+document.addEventListener("pointerlockchange", () => {
+  if (joined) {
+    const locked = isPointerLocked();
+    hud.setPauseVisible(!locked);
+  }
+});
+
 function readSavedName(): string {
   try {
     return localStorage.getItem(NAME_STORAGE_KEY) ?? "";
@@ -153,6 +168,17 @@ function spawnDeathRagdoll(view: render.PlayerView, death: DeathMessage): Ragdol
   );
 }
 
+function triggerDirectionalIndicator(fromX: number, fromZ: number): void {
+  const dx = fromX - net.predicted.x;
+  const dz = fromZ - net.predicted.z;
+  const distSq = dx * dx + dz * dz;
+  if (distSq > 0.1 && distSq < 3600) {
+    const worldAngle = Math.atan2(-dx, -dz);
+    const relAngle = worldAngle - look.yaw;
+    hud.showDirectionalIndicator(relAngle);
+  }
+}
+
 function handleWorldEvent(event: net.WorldEvent): void {
   const now = performance.now();
   switch (event.type) {
@@ -174,6 +200,9 @@ function handleWorldEvent(event: net.WorldEvent): void {
         net.predicted.y + EYE_HEIGHT,
         net.predicted.z,
       );
+      if (event.shooterId !== net.self.id) {
+        triggerDirectionalIndicator(event.fromX, event.fromZ);
+      }
       return;
     case "death": {
       const view = render.getPlayerView(event.victimId);
@@ -192,6 +221,7 @@ function handleWorldEvent(event: net.WorldEvent): void {
         net.predicted.y + EYE_HEIGHT,
         net.predicted.z,
       );
+      triggerDirectionalIndicator(event.x, event.z);
       return;
   }
 }
