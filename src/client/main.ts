@@ -19,6 +19,7 @@ import {
   type RosterEntry,
 } from "../shared/protocol.ts";
 import { castWorldRay, createArenaWorld } from "../shared/world.ts";
+import { initAudio, playExplosionSound, playLocalGunshot, playRemoteGunshot } from "./audio.ts";
 import * as hud from "./hud.ts";
 import {
   consumeButtons,
@@ -89,6 +90,7 @@ function play(name: string): void {
   } catch {
     // Not remembering the name is harmless.
   }
+  initAudio();
   hud.setMenuStatus("Connecting…");
   requestPointerLock(canvas);
   net.connect(name, mover, {
@@ -164,6 +166,14 @@ function handleWorldEvent(event: net.WorldEvent): void {
         event.toZ,
         now,
       );
+      playRemoteGunshot(
+        event.fromX,
+        event.fromY,
+        event.fromZ,
+        net.predicted.x,
+        net.predicted.y + EYE_HEIGHT,
+        net.predicted.z,
+      );
       return;
     case "death": {
       const view = render.getPlayerView(event.victimId);
@@ -174,6 +184,14 @@ function handleWorldEvent(event: net.WorldEvent): void {
     case "explosion":
       render.showExplosion(event.x, event.y, event.z, now);
       blastRagdolls(event.x, event.y, event.z);
+      playExplosionSound(
+        event.x,
+        event.y,
+        event.z,
+        net.predicted.x,
+        net.predicted.y + EYE_HEIGHT,
+        net.predicted.z,
+      );
       return;
   }
 }
@@ -199,6 +217,7 @@ function showOwnShot(nowMs: number): void {
   const eyeZ = net.predicted.z;
   viewDirection(look.yaw, look.pitch, aim);
   const distance = castWorldRay(world, eyeX, eyeY, eyeZ, aim.x, aim.y, aim.z, RIFLE_RANGE);
+  playLocalGunshot();
   render.playLocalShotEffects(nowMs);
   render.muzzleWorldPosition(muzzle);
   render.showTracer(
