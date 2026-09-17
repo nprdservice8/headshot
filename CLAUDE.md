@@ -1,0 +1,268 @@
+# Headshot
+
+A 3D first-person deathmatch that runs in the browser: open a link and play. Inspired by deadshot.io: tiny download, instant load, smooth on weak laptops.
+
+- **Now:** played on a local network.
+- **Later:** public online. Everything is built for that from day one: the server checks every move and hit, and players see no lag.
+
+## Stack
+
+| Part | Choice |
+|---|---|
+| 3D graphics (browser only) | Three.js |
+| Physics (browser and server) | Rapier (`@dimforge/rapier3d-compat`) |
+| Server | Node.js 22 + `ws`. Node runs `.ts` files directly; no server build. |
+| Language | TypeScript, used for type checking only |
+| Client bundle | esbuild: one minified file in `dist/` |
+| Format and lint | Biome |
+| Tests | `node --test` |
+
+- Dependencies are pinned to exact versions (`npm install --save-exact`).
+- **Adding any dependency needs a reason a few lines of code can't cover. Ask first.**
+
+## Layout
+
+```
+public/
+  index.html          page shell, HUD markup, preload tags
+  assets/             .glb models and maps, textures (none yet)
+build.ts              esbuild: production bundle, or watch + server with --dev
+src/
+  shared/             runs in the browser AND on the server
+    constants.ts      every tunable number
+    math.ts           clamp, lerp, angle wrapping, rounding
+    protocol.ts       message types, encode/decode, validation
+    world.ts          builds Rapier colliders for the map
+    movement.ts       player movement (Rapier character controller)
+    combat.ts         hit tests, damage, explosion falloff, lag-compensation rewind
+  server/             Node only
+    main.ts           WebSocket, connection limits, tick loop, fake lag
+    static-files.ts   safe path resolution for public/ and dist/
+    match.ts          authoritative tick: inputs, simulation, grenades, respawns, scores, snapshots
+  client/             browser only
+    main.ts           boot: preload, Rapier init, connect, main loop
+    net.ts            socket, prediction, reconciliation, snapshot buffer, interpolation
+    input.ts          pointer lock, keyboard/mouse → input commands
+    render.ts         Three.js scene, player and grenade views, effects
+    ragdoll.ts        local-only ragdolls
+    hud.ts            DOM HUD, scoreboard, kill feed
+dist/                 build output (generated; never edit)
+```
+
+- **Import rules:**
+  - `shared/` imports nothing from `client/` or `server/` and uses no DOM, Node APIs or Three.js.
+  - `server/` never imports Three.js.
+  - `client/` never imports Node APIs.
+- Tests sit next to the code as `*.test.ts`.
+- Create a file when its build step needs it. Split a file when it passes ~400 lines or does two unrelated jobs.
+
+## Netcode architecture
+
+The server is the single source of truth. **Do not weaken this model without discussing it first.**
+
+### Server
+- Simulates at a fixed `TICK_RATE` (60 Hz) and sends a snapshot every `SNAPSHOT_INTERVAL_TICKS` ticks (30 Hz).
+- Uses a fixed timestep with an accumulator. Never simulate with a variable delta.
+- Each match owns one Rapier world: map colliders, grenade bodies, and one capsule collider plus character controller shared by all players (moved to each player in turn).
+- Players never collide with each other. This keeps prediction accurate.
+
+### Inputs
+- Every client tick, the client sends one input command: `{ seq, buttons, yaw, pitch, viewTick }`.
+- The server applies **one command per player per tick**:
+  - Extra commands wait in a queue capped at `MAX_INPUT_QUEUE`.
+  - If none has arrived, the server repeats the last one.
+  - So a client can't move faster by sending more commands.
+
+### Prediction
+- The client runs the same `shared/movement.ts` on its own inputs straight away.
+- It keeps the commands the server hasn't confirmed yet.
+- When a snapshot arrives, the client:
+  1. resets to the server's state (position, velocity, grounded)
+  2. replays the unconfirmed commands
+  3. blends away any small visual error over a few frames
+- Mouse look is applied every frame. Each command records the yaw and pitch at that moment.
+
+### Other players
+- Drawn `INTERP_DELAY_MS` (100 ms) in the past, sliding between buffered snapshots.
+- The client's own player is drawn blended between its last two fixed simulation steps.
+
+### Hits (lag compensation)
+- The server keeps about 1 s of player hitbox history.
+- When a player fires, the server rewinds the other players to that command's `viewTick` (at most `MAX_REWIND_MS`).
+- It tests the shot against head spheres and body capsules using math in `shared/combat.ts`.
+- A Rapier raycast against the static world checks whether a wall blocked the shot.
+
+### Grenades, explosions and ragdolls
+- **Grenades** exist only as Rapier bodies on the server. Clients draw them from snapshots.
+- **Explosions** are resolved on the server: damage fades with distance, needs line of sight, and applies knockback to player velocity (which prediction then picks up).
+- **Ragdolls** exist only in the browser, in the client's own Rapier world. They are never sent over the network.
+
+### Messages
+- All encoding and decoding goes through `shared/protocol.ts`, and nothing else touches raw messages.
+- For now, inputs and snapshots are JSON. Before going public, switch them to binary inside `protocol.ts` only.
+
+### Collision groups
+Defined in `constants.ts`:
+
+| Group | Collides with |
+|---|---|
+| `WORLD` | everything |
+| `PLAYER` | `WORLD` |
+| `GRENADE` | `WORLD` |
+| `RAGDOLL` | `WORLD` |
+
+Hitboxes are not Rapier colliders.
+
+### Conventions
+- 1 unit = 1 metre. Y is up (Three.js and Rapier agree). Angles are in radians.
+- Simulation time is counted in **ticks** (integers). Wall-clock time names end in `Ms`: `respawnDelayMs`.
+
+## Code rules
+
+### TypeScript
+- `tsconfig`: `strict`, `noUncheckedIndexedAccess`, `erasableSyntaxOnly`, `verbatimModuleSyntax`, `allowImportingTsExtensions`, `noEmit`.
+- Only syntax Node can strip:
+  - no `enum` (use `as const` objects or string unions)
+  - no `namespace`
+  - no parameter properties
+- Imports use `.ts` extensions. Type-only imports use `import type`. Import from Three.js by name, never `import * as THREE`, so unused parts get dropped from the bundle.
+- No `any`. Use `unknown` and narrow it at trust boundaries.
+- No `!` non-null assertions. Every `as` cast gets a comment saying why it's safe.
+
+### Readability
+- **Game state is plain typed data.** Logic is functions that take state. No classes of our own (Three.js and Rapier classes are fine).
+- **State never holds Three.js objects.** `render.ts` keeps a `Map<id, view>` and syncs the views from state each frame.
+- **The server has no module-level mutable state.** Everything belongs to a match object that gets passed around, so one process can run many matches later.
+- **Naming:**
+  - `camelCase` for variables and functions
+  - `PascalCase` for types
+  - `UPPER_SNAKE_CASE` for constants
+  - `kebab-case` for file names
+- Every tunable number is a named constant in `shared/constants.ts`. No magic numbers.
+- Return early instead of nesting.
+- Comments explain **why**, never what. No commented-out code, no dead code.
+- Add an abstraction only at the second real use.
+
+### Performance budgets
+
+| What | Budget |
+|---|---|
+| Load | ≤ 3 MB compressed until playable; playable within 3 s on a normal home connection |
+| Client | Steady 60 fps at 1080p on Intel UHD integrated graphics |
+| Server | One tick ≤ 2 ms for a full 8-player match |
+
+### Performance rules
+- **No allocations in hot paths** (render loop, fixed tick, movement, hit tests). JSON encoding allocates; that exception ends when messages switch to binary:
+  - no `new`, object/array literals, spread, closures, or `map`/`filter`
+  - reuse module-level scratch objects (`const tmpVec = new Vector3()`)
+  - garbage-collection pauses cause stutter
+- Reuse objects for short-lived effects (tracers, impacts, explosion particles) instead of creating them per shot.
+- **Rapier memory lives in WASM**, and JavaScript's garbage collector won't free it. Every Rapier body, collider, joint, character controller and world is removed or `.free()`d explicitly.
+- Three.js geometries, materials and textures are shared, and disposed when no longer used.
+- Input handlers only record state. The fixed tick acts on it.
+- Update the DOM (HUD, scoreboard, kill feed) only when a value changes, never every frame.
+- **Lighting:**
+  - Static map lighting is baked into lightmaps. No real-time shadows, no post-processing.
+  - Moving objects use one hemisphere light plus one directional light.
+- Cap pixel ratio: `renderer.setPixelRatio(Math.min(devicePixelRatio, 2))`.
+- Merge static map meshes by material. Repeated props use `InstancedMesh`.
+- **Assets:** low-poly `.glb` with shared texture atlases. Check each new asset against the load budget.
+- Measure before optimising: Chrome's Performance panel, `renderer.info.render.calls`, tick-time logging on the server.
+
+### Robustness and security
+- **Every client message is untrusted.**
+  - `protocol.ts` decode functions check every field (type, finite numbers, ranges, lengths) and return `null` if anything is invalid.
+  - A malformed message closes that connection.
+- **Connection limits:**
+  - `ws` `maxPayload` is set small.
+  - Each connection has a message-rate cap.
+  - Names are limited to 16 characters with control characters removed.
+- One connection's error closes that connection, never the whole server process.
+- Show player-provided text with `textContent`, never `innerHTML`.
+- The static file server resolves each requested path and rejects anything outside `public/` and `dist/`.
+- The server decides fire rate, damage, grenade count and respawns. The client only draws them.
+- Outside trust boundaries, don't `try/catch` to hide bugs. Let programmer errors fail loudly.
+
+### Testing
+- `node --test` with `node:assert/strict`. No test framework.
+- **Test everything in `shared/`:**
+  - movement: climbing slopes, stopping at walls, jumping
+  - protocol: encode/decode round trips, rejecting bad messages
+  - combat: damage, headshots, explosion falloff, lag-compensation rewind
+  - prediction: replaying commands gives the same position
+  - match rules
+- Call `await RAPIER.init()` once per test file.
+- Pointer lock doesn't work in headless Chrome, so keyboard and mouse input can only be checked by hand.
+- Verify networking by playing with fake lag: `LAG_MS` and `JITTER_MS` make the server delay messages.
+- A logic bug fix comes with a test that fails without the fix.
+
+## Definition of done (every change)
+
+1. `npm run check` passes: type check, Biome, tests.
+2. It plays correctly in 2 tabs with no lag **and** with `LAG_MS=150`: no rubber-banding, no jitter.
+3. No errors or warnings in the browser console or the server log.
+4. Budgets still hold: fps, tick time, bundle size.
+5. This file is updated if a rule or decision changed.
+
+## Workflow
+
+- Build in the order below, one step at a time. Each step must be playable before the next starts.
+- **Ask first before:**
+  - adding a dependency or a top-level folder
+  - changing the netcode model
+  - changing a performance budget
+- Make the smallest change that solves the problem. Fix bugs where they're caused, not where they show up.
+- Until step 7, the arena is built in code from boxes and ramps. After that, maps are made in Blender with baked lighting and exported as `.glb`.
+
+## Game design (v1)
+
+- **Controls:** WASD to move, mouse to look (pointer lock), Space to jump, left click to shoot, G to throw a grenade. Hold Tab for the scoreboard.
+- **Movement:** gravity, slopes, auto-stepping onto small ledges, sliding along walls.
+- **Rifle:** hits instantly. 100 HP; a body shot does 25 damage; a headshot kills instantly.
+- **Grenades:**
+  - 2 per life. They bounce off the world and explode after a 3 s fuse.
+  - Damage and knockback fade with distance and need line of sight.
+  - Explosions throw ragdolls around.
+- **Deaths:** the body goes ragdoll (drawn only in each browser) and is removed after 10 s. Respawn after 3 s at a random spawn point.
+- **Characters:** blocky box people (head, torso, arms, legs) built in code, with a procedural walk cycle. Ragdolls reuse the same boxes. Nothing to download. A head sphere and body capsule are the hitboxes.
+- **Arena:** about 40×40 m, with cover, ramps and a raised platform.
+- **Match:** first to 15 kills wins. The scoreboard shows for 10 s, then the match restarts. Up to 8 players.
+- These numbers live in `shared/constants.ts` once it exists. Change them there, not here.
+
+## Build order
+
+Steps 1–6 are built (2026-09-17). Step 4 used box characters instead of a downloaded model. Next up: 7 and 8.
+
+1. **Setup and walking alone:**
+   - tooling (TypeScript, esbuild, Biome, tests)
+   - server serves the page
+   - arena built in code
+   - `shared/movement.ts` with tests
+   - mouse look
+2. **Server-checked movement:**
+   - input commands, server tick, snapshots
+   - prediction and reconciliation
+   - smooth movement for other players
+   - fake-lag testing
+3. **Rifle:** lag-compensated hits, body and head damage, death, respawn.
+4. **Characters and ragdolls:** rigged model, animations, head and body hitboxes, ragdoll on death.
+5. **Grenades:** simulated on the server, drawn smoothly on clients, damage that fades with distance, knockback, ragdoll impulses.
+6. **Match:** name entry, scoreboard, kill feed, win at 15 kills.
+7. **Real map:** made in Blender with baked lighting, compressed `.glb`, load budget checked.
+8. **Local-network playtest** on several PCs.
+
+## Before going public (not now)
+
+- Binary inputs and snapshots in `protocol.ts`, aiming for ≤ 10 KB/s per player.
+- Rooms and matchmaking.
+- Hosting behind Cloudflare: `wss://`, compressed and long-cached assets.
+- An `Origin` header check on WebSocket connections, plus per-IP connection limits.
+
+## Commands (set up in step 1)
+
+- `npm run dev`: builds the client in watch mode and starts the server, which prints the LAN address.
+- `npm run build`: builds the production client bundle into `dist/`.
+- `npm start`: runs the server and serves whatever `npm run build` last produced.
+- `npm run check`: type check, Biome, tests.
+- `npm test`: tests only.
+- **Fake lag** in PowerShell: `$env:LAG_MS=150; $env:JITTER_MS=30; npm run dev`
