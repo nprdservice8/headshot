@@ -19,7 +19,10 @@ import {
   type RosterEntry,
 } from "../shared/protocol.ts";
 import { castWorldRay, createArenaWorld } from "../shared/world.ts";
+import { loadAssets } from "./assets.ts";
 import { initAudio, playExplosionSound, playLocalGunshot, playRemoteGunshot } from "./audio.ts";
+import * as characters from "./characters.ts";
+import * as effects from "./effects.ts";
 import * as hud from "./hud.ts";
 import {
   consumeButtons,
@@ -44,15 +47,21 @@ import * as render from "./render.ts";
 const NAME_STORAGE_KEY = "headshot.name";
 const DEATH_CAMERA_DISTANCE = 4;
 const DEATH_CAMERA_HEIGHT = 2.5;
+/** Ground probes start this far above the feet, so standing exactly on a surface still hits it. */
+const GROUND_PROBE_LIFT = 0.1;
+const OWN_TRACER_DROP = 0.1;
 
 const canvas = hud.getElement("game", HTMLCanvasElement);
 
-await RAPIER.init();
+const [assets] = await Promise.all([loadAssets(), RAPIER.init()]);
 // The browser's own physics world: the arena for predicting movement, plus local-only ragdolls.
 const world = createArenaWorld();
 const mover = createMover(world);
-render.initRenderer(canvas);
-initRagdolls(world);
+render.initRenderer(canvas, assets);
+characters.initCharacters(assets, render.scene, probeGround);
+initRagdolls(world, render.scene);
+effects.initEffects(render.scene, render.getViewmodelMuzzle());
+await render.warmUp();
 
 let joined = false;
 let disconnected = false;
@@ -62,6 +71,8 @@ let ownRagdoll: Ragdoll | null = null;
 let localTick = 0;
 let nextLocalFireTick = 0;
 let frameDt = 0;
+let lastDrawX = 0;
+let lastDrawZ = 0;
 
 const muzzle = new Vector3();
 const aim = { x: 0, y: 0, z: 0 };
@@ -85,6 +96,11 @@ document.addEventListener("pointerlockchange", () => {
     hud.setPauseVisible(!locked);
   }
 });
+
+function probeGround(x: number, y: number, z: number, max: number): number {
+  const lift = GROUND_PROBE_LIFT;
+  return castWorldRay(world, x, y + lift, z, 0, -1, 0, max + lift) - lift;
+}
 
 function readSavedName(): string {
   try {
@@ -111,12 +127,13 @@ function play(name: string): void {
   net.connect(name, mover, {
     onWelcome() {
       joined = true;
+      render.setViewmodelTeam(net.self.id);
       hud.showHud();
     },
     onRoster(players) {
       roster = players;
       hud.setScoreboard(players, net.self.id);
-      render.removePlayerViewsExcept(new Set(players.map((player) => player.id)));
+      characters.removePlayerViewsExcept(new Set(players.map((player) => player.id)));
     },
     onMatch(message) {
       match = message;
@@ -125,7 +142,7 @@ function play(name: string): void {
       hud.flashHitmarker(message.head);
     },
     onSelfDeath(message) {
-      const view = render.getPlayerView(net.self.id);
+      const view = characters.getPlayerView(net.self.id);
       if (view) ownRagdoll = spawnDeathRagdoll(view, message);
       addKillFeedEntry(message);
     },
@@ -157,7 +174,7 @@ function addKillFeedEntry(death: DeathMessage): void {
   hud.addKillFeedEntry(killer, nameOf(death.victimId), icon);
 }
 
-function spawnDeathRagdoll(view: render.PlayerView, death: DeathMessage): Ragdoll | null {
+function spawnDeathRagdoll(view: characters.PlayerView, death: DeathMessage): Ragdoll | null {
   const speed = death.cause === "grenade" ? RAGDOLL_BLAST_SPEED : RAGDOLL_SHOT_SPEED;
   return spawnRagdoll(
     view,
@@ -183,15 +200,14 @@ function handleWorldEvent(event: net.WorldEvent): void {
   const now = performance.now();
   switch (event.type) {
     case "shot":
-      render.showTracer(
-        event.fromX,
-        event.fromY - 0.1,
-        event.fromZ,
-        event.toX,
-        event.toY,
-        event.toZ,
-        now,
-      );
+      characters.playShot(event.shooterId);
+      if (characters.muzzlePosition(event.shooterId, muzzle)) {
+        effects.showMuzzleFlash(muzzle.x, muzzle.y, muzzle.z, now);
+      } else {
+        muzzle.set(event.fromX, event.fromY - OWN_TRACER_DROP, event.fromZ);
+      }
+      effects.showTracer(muzzle.x, muzzle.y, muzzle.z, event.toX, event.toY, event.toZ, now);
+      effects.showImpact(event.toX, event.toY, event.toZ, now);
       playRemoteGunshot(
         event.fromX,
         event.fromY,
@@ -205,13 +221,13 @@ function handleWorldEvent(event: net.WorldEvent): void {
       }
       return;
     case "death": {
-      const view = render.getPlayerView(event.victimId);
+      const view = characters.getPlayerView(event.victimId);
       if (view) spawnDeathRagdoll(view, event);
       addKillFeedEntry(event);
       return;
     }
     case "explosion":
-      render.showExplosion(event.x, event.y, event.z, now);
+      effects.showExplosion(event.x, event.y, event.z, now);
       blastRagdolls(event.x, event.y, event.z);
       playExplosionSound(
         event.x,
@@ -248,17 +264,14 @@ function showOwnShot(nowMs: number): void {
   viewDirection(look.yaw, look.pitch, aim);
   const distance = castWorldRay(world, eyeX, eyeY, eyeZ, aim.x, aim.y, aim.z, RIFLE_RANGE);
   playLocalGunshot();
-  render.playLocalShotEffects(nowMs);
+  const hitX = eyeX + aim.x * distance;
+  const hitY = eyeY + aim.y * distance;
+  const hitZ = eyeZ + aim.z * distance;
+  render.kickViewmodel();
+  effects.showViewmodelFlash(nowMs);
   render.muzzleWorldPosition(muzzle);
-  render.showTracer(
-    muzzle.x,
-    muzzle.y,
-    muzzle.z,
-    eyeX + aim.x * distance,
-    eyeY + aim.y * distance,
-    eyeZ + aim.z * distance,
-    nowMs,
-  );
+  effects.showTracer(muzzle.x, muzzle.y, muzzle.z, hitX, hitY, hitZ, nowMs);
+  if (distance < RIFLE_RANGE) effects.showImpact(hitX, hitY, hitZ, nowMs);
 }
 
 function drawOtherPlayer(
@@ -270,7 +283,7 @@ function drawOtherPlayer(
   pitch: number,
   alive: boolean,
 ): void {
-  render.updatePlayerView(id, x, y, z, yaw, pitch, alive, frameDt);
+  characters.updatePlayerView(id, x, y, z, yaw, pitch, alive, frameDt);
 }
 
 function drawFrame(nowMs: number, alpha: number): void {
@@ -285,7 +298,16 @@ function drawFrame(nowMs: number, alpha: number): void {
   const y = lerp(net.previous.y, net.predicted.y, alpha) + net.correction.y;
   const z = lerp(net.previous.z, net.predicted.z, alpha) + net.correction.z;
   // Your own body is never drawn, but its pose is kept up to date for your ragdoll.
-  render.updatePlayerView(net.self.id, x, y, z, look.yaw, look.pitch, false, frameDt);
+  characters.updatePlayerView(net.self.id, x, y, z, look.yaw, look.pitch, false, frameDt);
+  render.updateViewmodel(
+    frameDt,
+    Math.hypot(x - lastDrawX, z - lastDrawZ),
+    net.predicted.grounded,
+    look.yaw,
+    look.pitch,
+  );
+  lastDrawX = x;
+  lastDrawZ = z;
 
   const camera = render.camera;
   if (net.self.alive) {
@@ -301,7 +323,7 @@ function drawFrame(nowMs: number, alpha: number): void {
   }
   render.setViewmodelVisible(net.self.alive);
   syncRagdollMeshes();
-  render.updateEffects(nowMs, frameDt);
+  effects.updateEffects(nowMs);
 
   hud.setHealth(net.self.hp);
   hud.setGrenades(net.self.grenades);

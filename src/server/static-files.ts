@@ -10,6 +10,7 @@ export const CONTENT_TYPES: Readonly<Record<string, string>> = {
   ".jpg": "image/jpeg",
   ".glb": "model/gltf-binary",
   ".ktx2": "image/ktx2",
+  ".webp": "image/webp",
 };
 
 export function contentTypeFor(filePath: string): string {
