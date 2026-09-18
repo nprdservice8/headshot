@@ -27,6 +27,8 @@ const resumeBtn = getElement("resume-btn", HTMLButtonElement);
 const exitBtn = getElement("exit-btn", HTMLButtonElement);
 const scoreboard = getElement("scoreboard", HTMLDivElement);
 const scoreboardRows = getElement("scoreboard-rows", HTMLTableSectionElement);
+const matchKills = getElement("match-kills", HTMLSpanElement);
+const onlinePlayers = getElement("online-players", HTMLSpanElement);
 const weaponName = getElement("weapon-name", HTMLSpanElement);
 const weaponAmmo = getElement("weapon-ammo", HTMLSpanElement);
 const weaponSlots = getElement("weapon-slots", HTMLDivElement);
@@ -40,6 +42,8 @@ let shownGrenades = -1;
 let shownCenterMessage = "";
 let shownWeapon = -1;
 let shownRockets = -1;
+let shownKills = -1;
+let shownOnlinePlayers = -1;
 
 export function showDirectionalIndicator(angleRad: number): void {
   const arc = document.createElement("div");
@@ -174,6 +178,19 @@ export function setScoreboard(players: readonly RosterEntry[], myId: number): vo
       return row;
     }),
   );
+}
+
+export function setMatchStats(players: readonly RosterEntry[], myId: number): void {
+  const me = players.find((player) => player.id === myId);
+  const kills = me?.kills ?? 0;
+  if (kills !== shownKills) {
+    shownKills = kills;
+    matchKills.textContent = String(kills);
+  }
+  if (players.length !== shownOnlinePlayers) {
+    shownOnlinePlayers = players.length;
+    onlinePlayers.textContent = String(players.length);
+  }
 }
 
 export function setScoreboardVisible(visible: boolean): void {

@@ -134,6 +134,7 @@ function play(name: string): void {
     onRoster(players) {
       roster = players;
       hud.setScoreboard(players, net.self.id);
+      hud.setMatchStats(players, net.self.id);
       characters.removePlayerViewsExcept(new Set(players.map((player) => player.id)));
     },
     onMatch(message) {

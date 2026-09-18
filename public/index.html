@@ -398,6 +398,39 @@
     }
 
     /* Tactical Stats Card (Bottom Left) */
+    #match-stats {
+      position: absolute;
+      left: 28px;
+      top: 24px;
+      display: flex;
+      gap: 10px;
+    }
+
+    .match-stat {
+      min-width: 82px;
+      padding: 9px 12px 8px;
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      backdrop-filter: blur(14px);
+      border-radius: 10px;
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);
+    }
+
+    .match-stat-value {
+      display: block;
+      color: var(--cyan);
+      font: 900 23px/1 "Chakra Petch", sans-serif;
+      text-shadow: 0 0 10px var(--cyan-glow);
+    }
+
+    .match-stat-label {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font: 700 10px/1 "Chakra Petch", sans-serif;
+      letter-spacing: .1em;
+    }
+
     #stats {
       position: absolute;
       left: 28px;
@@ -780,6 +813,17 @@
     <div id="damage-flash"></div>
     <div id="critical-vignette"></div>
     <div id="damage-indicators"></div>
+
+    <div id="match-stats">
+      <div class="match-stat">
+        <span id="match-kills" class="match-stat-value">0</span>
+        <span class="match-stat-label">KILLS</span>
+      </div>
+      <div class="match-stat">
+        <span id="online-players" class="match-stat-value">0</span>
+        <span class="match-stat-label">ONLINE</span>
+      </div>
+    </div>
 
     <div id="stats">
       <div class="stats-row">
