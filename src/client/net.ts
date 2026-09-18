@@ -44,6 +44,8 @@ export const self = {
   hp: 0,
   grenades: 0,
   rockets: 0,
+  ammo: 0,
+  reloading: false,
   weapon: 0,
   ads: false,
   sprinting: false,
@@ -172,6 +174,8 @@ function reconcile(snapshot: SnapshotMessage): void {
   self.hp = you.hp;
   self.grenades = you.grenades;
   self.rockets = you.rockets;
+  self.ammo = you.ammo;
+  self.reloading = you.reloading;
   self.weapon = you.weapon;
   self.ads = you.ads;
   self.sprinting = you.sprinting;
@@ -188,6 +192,7 @@ function reconcile(snapshot: SnapshotMessage): void {
   predicted.vy = you.vy;
   predicted.vz = you.vz;
   predicted.grounded = you.grounded;
+  predicted.stamina = you.stamina;
   if (you.alive) {
     for (let i = 0; i < pendingCount; i++) {
       const index = (pendingStart + i) % MAX_PENDING_INPUTS;

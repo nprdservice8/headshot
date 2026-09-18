@@ -17,7 +17,10 @@ import {
   PLAYER_HEIGHT,
   PLAYER_RADIUS,
   SNAP_TO_GROUND,
+  SPRINT_DRAIN_PER_SEC,
+  SPRINT_REGEN_PER_SEC,
   SPRINT_SPEED,
+  SPRINT_STAMINA_MAX,
   STEP_HEIGHT,
   STEP_MIN_WIDTH,
   TICK_SEC,
@@ -36,6 +39,10 @@ export type MoveState = {
   vy: number;
   vz: number;
   grounded: boolean;
+  /** Seconds of sprint left. Drains while sprinting, regenerates otherwise. */
+  stamina: number;
+  /** Whether the last step actually sprinted (the request, gated by stamina). */
+  sprinting: boolean;
 };
 
 /**
@@ -71,7 +78,17 @@ export function createMover(world: World): Mover {
 }
 
 export function createMoveState(x: number, y: number, z: number): MoveState {
-  return { x, y, z, vx: 0, vy: 0, vz: 0, grounded: false };
+  return {
+    x,
+    y,
+    z,
+    vx: 0,
+    vy: 0,
+    vz: 0,
+    grounded: false,
+    stamina: SPRINT_STAMINA_MAX,
+    sprinting: false,
+  };
 }
 
 export function copyMoveState(from: MoveState, to: MoveState): void {
@@ -82,6 +99,8 @@ export function copyMoveState(from: MoveState, to: MoveState): void {
   to.vy = from.vy;
   to.vz = from.vz;
   to.grounded = from.grounded;
+  to.stamina = from.stamina;
+  to.sprinting = from.sprinting;
 }
 
 const probe = { x: 0, y: 0, z: 0 };
@@ -140,8 +159,19 @@ export function stepMovement(
   state: MoveState,
   buttons: number,
   yaw: number,
-  sprinting = false,
+  wantsSprint = false,
 ): void {
+  // Exhausted sprinters must fully recover before sprinting again, so stamina near zero never
+  // flickers between sprint and walk speed from one tick's regen alone.
+  const sprinting =
+    wantsSprint && (state.sprinting ? state.stamina > 0 : state.stamina >= SPRINT_STAMINA_MAX);
+  state.stamina = clamp(
+    state.stamina + (sprinting ? -SPRINT_DRAIN_PER_SEC : SPRINT_REGEN_PER_SEC) * TICK_SEC,
+    0,
+    SPRINT_STAMINA_MAX,
+  );
+  state.sprinting = sprinting;
+
   let localX = 0;
   let localZ = 0;
   if (buttons & BUTTON.FORWARD) localZ -= 1;

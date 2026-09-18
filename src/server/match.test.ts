@@ -15,6 +15,7 @@ import {
   SPAWN_SAFE_DISTANCE,
 } from "../shared/constants.ts";
 import { BUTTON, type InputMessage, type ServerMessage } from "../shared/protocol.ts";
+import { WEAPON, weaponDefinition } from "../shared/weapons.ts";
 import type { SpawnPoint } from "../shared/world.ts";
 import {
   addPlayer,
@@ -189,6 +190,30 @@ test("the server enforces the fire rate", () => {
     tickMatch(match);
   }
   assert.equal(messagesOfType(sent, "shot").length, 2);
+});
+
+test("rifle ammo depletes, blocks firing at zero, and a reload refills it", () => {
+  const { match, sent, shooter } = setup();
+  place(match, shooter, -3, -38);
+  ticks(match, 5);
+  const magSize = weaponDefinition(WEAPON.RIFLE).magSize;
+
+  for (let i = 0; i < magSize * FIRE_INTERVAL_TICKS + 5; i++) {
+    input(match, shooter, BUTTON.FIRE, 0, 0);
+    tickMatch(match);
+  }
+  assert.equal(shooter.ammo[WEAPON.RIFLE], 0);
+  assert.equal(messagesOfType(sent, "shot").length, magSize, "cannot fire past an empty magazine");
+
+  input(match, shooter, BUTTON.RELOAD, 0, 0);
+  tickMatch(match);
+  assert.equal(shooter.reloading, true);
+  ticks(match, weaponDefinition(WEAPON.RIFLE).reloadTicks);
+  assert.equal(shooter.ammo[WEAPON.RIFLE], magSize);
+
+  input(match, shooter, BUTTON.FIRE, 0, 0);
+  tickMatch(match);
+  assert.equal(messagesOfType(sent, "shot").length, magSize + 1);
 });
 
 test("bazooka fires a swept straight rocket, splashes, and respects its cooldown", () => {

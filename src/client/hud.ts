@@ -1,5 +1,6 @@
 import { KILL_FEED_MAX, KILL_FEED_MS } from "../shared/constants.ts";
 import type { RosterEntry } from "../shared/protocol.ts";
+import { WEAPON, weaponDefinition } from "../shared/weapons.ts";
 import { PLAY_HALF_SIZE } from "../shared/world.ts";
 
 export function getElement<T extends HTMLElement>(id: string, type: { new (): T }): T {
@@ -54,6 +55,8 @@ let shownGrenades = -1;
 let shownCenterMessage = "";
 let shownWeapon = -1;
 let shownRockets = -1;
+let shownAmmo = -1;
+let shownReloading = false;
 let shownKills = -1;
 let shownOnlinePlayers = -1;
 
@@ -266,13 +269,32 @@ export function setGrenades(value: number): void {
   grenades.textContent = String(value);
 }
 
-export function setWeapon(weapon: number, rockets: number, ads: boolean, sprinting: boolean): void {
-  if (weapon !== shownWeapon || rockets !== shownRockets) {
+export function setWeapon(
+  weapon: number,
+  ammo: number,
+  rockets: number,
+  reloading: boolean,
+  ads: boolean,
+  sprinting: boolean,
+): void {
+  if (
+    weapon !== shownWeapon ||
+    ammo !== shownAmmo ||
+    rockets !== shownRockets ||
+    reloading !== shownReloading
+  ) {
     shownWeapon = weapon;
+    shownAmmo = ammo;
     shownRockets = rockets;
+    shownReloading = reloading;
     const names = ["RIFLE", "SMG", "BAZOOKA"];
     weaponName.textContent = names[weapon] ?? "RIFLE";
-    weaponAmmo.textContent = weapon === 2 ? `${rockets} ROCKETS` : "∞ AMMO";
+    weaponAmmo.textContent =
+      weapon === WEAPON.BAZOOKA
+        ? `${rockets} ROCKETS`
+        : reloading
+          ? "RELOADING…"
+          : `${ammo}/${weaponDefinition(weapon).magSize}`;
     for (const slot of weaponSlots.children) {
       slot.classList.toggle("selected", Number((slot as HTMLElement).dataset.weapon) === weapon);
     }

@@ -28,13 +28,13 @@ import {
   GRENADE_THROW_LIFT,
   GRENADE_THROW_SPEED,
   GRENADES_PER_LIFE,
-  HEALTH_REGEN_DELAY_TICKS,
-  HEALTH_REGEN_INTERVAL_TICKS,
-  HEALTH_REGEN_TRIGGER_HP,
   GROUP_GRENADE,
   GROUP_WORLD,
   HEAD_CENTER_Y,
   HEAD_RADIUS,
+  HEALTH_REGEN_DELAY_TICKS,
+  HEALTH_REGEN_INTERVAL_TICKS,
+  HEALTH_REGEN_TRIGGER_HP,
   INPUT_REPEAT_TICKS,
   KILLS_TO_WIN,
   MATCH_RESTART_TICKS,
@@ -54,6 +54,7 @@ import {
   ROCKETS_PER_LIFE,
   SNAPSHOT_INTERVAL_TICKS,
   SPAWN_SAFE_DISTANCE,
+  SPRINT_STAMINA_MAX,
 } from "../shared/constants.ts";
 import { clamp, round2, round3 } from "../shared/math.ts";
 import {
@@ -74,6 +75,7 @@ import {
   type RosterEntry,
   type ServerMessage,
 } from "../shared/protocol.ts";
+import { WEAPON, WEAPON_DEFINITIONS, type WeaponId, weaponDefinition } from "../shared/weapons.ts";
 import {
   castWorldRay,
   collisionGroups,
@@ -81,7 +83,6 @@ import {
   SPAWN_POINTS,
   type SpawnPoint,
 } from "../shared/world.ts";
-import { WEAPON, weaponDefinition, type WeaponId } from "../shared/weapons.ts";
 
 /** How the match talks to the outside world. The server wires this to sockets; tests record it. */
 export type Transport = {
@@ -100,6 +101,11 @@ export type Player = {
   grenades: number;
   rockets: number;
   weapon: WeaponId;
+  /** Rounds left in each weapon's magazine, indexed by WeaponId. The bazooka slot is unused. */
+  ammo: [number, number, number];
+  reloading: boolean;
+  reloadWeapon: WeaponId;
+  reloadEndTick: number;
   ads: boolean;
   sprinting: boolean;
   kills: number;
@@ -189,6 +195,10 @@ export function addPlayer(match: Match, name: string): Player | null {
     grenades: 0,
     rockets: 0,
     weapon: WEAPON.RIFLE,
+    ammo: [0, 0, 0],
+    reloading: false,
+    reloadWeapon: WEAPON.RIFLE,
+    reloadEndTick: 0,
     ads: false,
     sprinting: false,
     kills: 0,
@@ -270,28 +280,33 @@ function updatePlayer(match: Match, player: Player): void {
   }
 
   player.ads = (buttons & BUTTON.ADS) !== 0;
-  player.sprinting =
+  const wantsSprint =
     (buttons & BUTTON.SPRINT) !== 0 && !player.ads && (buttons & MOVEMENT_BUTTONS) !== 0;
 
   if (!player.alive) {
     if (match.state === "playing" && match.tick >= player.respawnTick) respawn(match, player);
   } else {
-    stepMovement(match.mover, player.move, buttons, player.yaw, player.sprinting);
+    stepMovement(match.mover, player.move, buttons, player.yaw, wantsSprint);
+    // Stamina can deny a sprint request, so the reported flag follows what actually happened.
+    player.sprinting = player.move.sprinting;
     if (player.regenerating && match.tick >= player.regenTick) {
       player.hp = Math.min(MAX_HP, player.hp + 1);
       player.regenerating = player.hp < MAX_HP;
       if (player.regenerating) player.regenTick = match.tick + HEALTH_REGEN_INTERVAL_TICKS;
     }
     if (match.state === "playing") {
+      updateReload(match, player, buttons);
       if (buttons & BUTTON.FIRE && match.tick >= player.nextFireTick) {
         const weapon = weaponDefinition(player.weapon);
-        if (
-          weapon.id !== WEAPON.BAZOOKA ||
-          (player.rockets > 0 && match.rockets.length < MAX_LIVE_ROCKETS)
-        ) {
+        if (weapon.id === WEAPON.BAZOOKA) {
+          if (player.rockets > 0 && match.rockets.length < MAX_LIVE_ROCKETS) {
+            player.nextFireTick = match.tick + weapon.fireIntervalTicks;
+            fireBazooka(match, player);
+          }
+        } else if (!player.reloading && player.ammo[weapon.id] > 0) {
           player.nextFireTick = match.tick + weapon.fireIntervalTicks;
-          if (weapon.id === WEAPON.BAZOOKA) fireBazooka(match, player);
-          else fireHitscan(match, player);
+          player.ammo[weapon.id]--;
+          fireHitscan(match, player);
         }
       }
       const grenadePressed = buttons & BUTTON.GRENADE && !(player.previousButtons & BUTTON.GRENADE);
@@ -301,6 +316,31 @@ function updatePlayer(match: Match, player: Player): void {
     }
   }
   player.previousButtons = buttons;
+}
+
+/** The bazooka reloads via its own fire cooldown; only the hitscan weapons use a magazine. */
+function updateReload(match: Match, player: Player, buttons: number): void {
+  if (player.weapon === WEAPON.BAZOOKA) return;
+  // Switching weapons mid-reload cancels it, same as the ammo it would have refilled.
+  if (player.reloading && player.weapon !== player.reloadWeapon) player.reloading = false;
+
+  if (player.reloading) {
+    if (match.tick >= player.reloadEndTick) {
+      player.ammo[player.weapon] = weaponDefinition(player.weapon).magSize;
+      player.reloading = false;
+    }
+    return;
+  }
+  const magSize = weaponDefinition(player.weapon).magSize;
+  if (player.ammo[player.weapon] >= magSize) return;
+  const reloadPressed =
+    (buttons & BUTTON.RELOAD) !== 0 && !(player.previousButtons & BUTTON.RELOAD);
+  const emptyAndFiring = (buttons & BUTTON.FIRE) !== 0 && player.ammo[player.weapon] === 0;
+  if (reloadPressed || emptyAndFiring) {
+    player.reloading = true;
+    player.reloadWeapon = player.weapon;
+    player.reloadEndTick = match.tick + weaponDefinition(player.weapon).reloadTicks;
+  }
 }
 
 /** Tests the shot against where targets were on the shooter's screen, then against the arena. */
@@ -655,6 +695,7 @@ function respawn(match: Match, player: Player): void {
   player.move.vy = 0;
   player.move.vz = 0;
   player.move.grounded = false;
+  player.move.stamina = SPRINT_STAMINA_MAX;
   player.yaw = spawn.yaw;
   player.pitch = 0;
   player.alive = true;
@@ -662,6 +703,12 @@ function respawn(match: Match, player: Player): void {
   player.grenades = GRENADES_PER_LIFE;
   player.rockets = ROCKETS_PER_LIFE;
   player.weapon = WEAPON.RIFLE;
+  player.ammo = [
+    WEAPON_DEFINITIONS[WEAPON.RIFLE].magSize,
+    WEAPON_DEFINITIONS[WEAPON.SMG].magSize,
+    WEAPON_DEFINITIONS[WEAPON.BAZOOKA].magSize,
+  ];
+  player.reloading = false;
   player.ads = false;
   player.sprinting = false;
   player.spawnTick = match.tick;
@@ -770,10 +817,13 @@ function sendSnapshots(match: Match): void {
         vy: p.move.vy,
         vz: p.move.vz,
         grounded: p.move.grounded,
+        stamina: round2(p.move.stamina),
         alive: p.alive,
         hp: p.hp,
         grenades: p.grenades,
         rockets: p.rockets,
+        ammo: p.ammo[p.weapon],
+        reloading: p.reloading,
         weapon: p.weapon,
         ads: p.ads,
         sprinting: p.sprinting,

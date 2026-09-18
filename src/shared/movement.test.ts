@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import { before, test } from "node:test";
 import type { World } from "@dimforge/rapier3d-compat";
 import RAPIER from "@dimforge/rapier3d-compat";
-import { PLAYER_RADIUS, SPRINT_SPEED, STEP_HEIGHT, TICK_RATE, WALK_SPEED } from "./constants.ts";
+import {
+  PLAYER_RADIUS,
+  SPRINT_SPEED,
+  SPRINT_STAMINA_MAX,
+  STEP_HEIGHT,
+  TICK_RATE,
+  WALK_SPEED,
+} from "./constants.ts";
 import {
   copyMoveState,
   createMover,
@@ -61,6 +68,33 @@ test("sprinting increases predicted speed deterministically", () => {
   const startZ = state.z;
   for (let i = 0; i < TICK_RATE; i++) stepMovement(mover, state, BUTTON.FORWARD, 0, true);
   assert.ok(Math.abs(startZ - state.z - SPRINT_SPEED) < 0.3, `moved ${startZ - state.z}`);
+});
+
+test("sprint stamina runs out and forces a walk until it regenerates", () => {
+  // Sprinting for the full stamina tank covers ~27 m; yaw PI runs +Z, away from every obstacle
+  // in the test course, so nothing but the stamina gate itself can stop the player.
+  const yaw = Math.PI;
+  const state = createMoveState(0, 0, 0);
+  run(state, 0, 10);
+  // Sprint until stamina runs out and the gate itself reports exhaustion (floating-point drain
+  // can land a hair above zero on the exact tick count, so wait for the gate, not a tick count).
+  let ticksToExhaustion = 0;
+  do {
+    stepMovement(mover, state, BUTTON.FORWARD, yaw, true);
+    ticksToExhaustion++;
+    assert.ok(ticksToExhaustion <= TICK_RATE * SPRINT_STAMINA_MAX + 5, "never exhausted");
+  } while (state.sprinting);
+  assert.ok(state.stamina < 0.02, `stamina = ${state.stamina}`);
+
+  // Holding sprint with an empty tank settles back to walk speed, never bursts back to sprint speed.
+  for (let i = 0; i < TICK_RATE; i++) stepMovement(mover, state, BUTTON.FORWARD, yaw, true);
+  assert.equal(state.sprinting, false, "must fully recover before sprinting again");
+  const startZ = state.z;
+  for (let i = 0; i < TICK_RATE; i++) stepMovement(mover, state, BUTTON.FORWARD, yaw, true);
+  assert.ok(Math.abs(state.z - startZ - WALK_SPEED) < 0.3, `moved ${state.z - startZ}`);
+
+  for (let i = 0; i < TICK_RATE * SPRINT_STAMINA_MAX * 4; i++) stepMovement(mover, state, 0, 0);
+  assert.equal(state.stamina, SPRINT_STAMINA_MAX);
 });
 
 test("yaw turns the forward direction", () => {

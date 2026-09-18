@@ -9,7 +9,6 @@ import {
   RIFLE_RANGE,
   TICK_MS,
 } from "../shared/constants.ts";
-import { weaponDefinition } from "../shared/weapons.ts";
 import { lerp } from "../shared/math.ts";
 import { createMover } from "../shared/movement.ts";
 import {
@@ -18,6 +17,7 @@ import {
   type MatchMessage,
   type RosterEntry,
 } from "../shared/protocol.ts";
+import { weaponDefinition } from "../shared/weapons.ts";
 import { castWorldRay, createArenaWorld } from "../shared/world.ts";
 import { loadAssets } from "./assets.ts";
 import { initAudio, playExplosionSound, playLocalGunshot, playRemoteGunshot } from "./audio.ts";
@@ -320,7 +320,14 @@ function drawFrame(nowMs: number, alpha: number): void {
 
   hud.setHealth(net.self.hp);
   hud.setGrenades(net.self.grenades);
-  hud.setWeapon(net.self.weapon, net.self.rockets, net.self.ads, net.self.sprinting);
+  hud.setWeapon(
+    net.self.weapon,
+    net.self.ammo,
+    net.self.rockets,
+    net.self.reloading,
+    net.self.ads,
+    net.self.sprinting,
+  );
   hud.setScoreboardVisible(isScoreboardHeld() || match.state === "ended");
   hud.setClickToPlayVisible(!isPointerLocked());
   if (match.state === "ended") {

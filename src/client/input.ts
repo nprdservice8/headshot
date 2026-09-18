@@ -13,6 +13,7 @@ const KEY_BUTTONS: Readonly<Record<string, number>> = {
   ArrowRight: BUTTON.RIGHT,
   Space: BUTTON.JUMP,
   KeyG: BUTTON.GRENADE,
+  KeyR: BUTTON.RELOAD,
   ShiftLeft: BUTTON.SPRINT,
   ShiftRight: BUTTON.SPRINT,
 };

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { NAME_MAX_LENGTH } from "./constants.ts";
 import {
+  ALL_BUTTONS,
   BUTTON,
   decodeClientMessage,
   decodeServerMessage,
@@ -48,7 +49,7 @@ test("rejects malformed client messages", () => {
     '{"type":"join","name":7}',
     JSON.stringify({ ...validInput, seq: -1 }),
     JSON.stringify({ ...validInput, seq: 1.5 }),
-    JSON.stringify({ ...validInput, buttons: 512 }),
+    JSON.stringify({ ...validInput, buttons: ALL_BUTTONS + 1 }),
     JSON.stringify({ ...validInput, buttons: "1" }),
     JSON.stringify({ ...validInput, yaw: 10 }),
     JSON.stringify({ ...validInput, pitch: 2 }),

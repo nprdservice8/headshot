@@ -17,6 +17,8 @@ export type WeaponDefinition = {
   fireIntervalTicks: number;
   spreadRad: number;
   reloadTicks: number;
+  /** Rounds per magazine. The bazooka ignores this: it tracks rockets per life instead. */
+  magSize: number;
   range: number;
   projectile: boolean;
 };
@@ -30,6 +32,7 @@ export const WEAPON_DEFINITIONS: readonly [WeaponDefinition, WeaponDefinition, W
     fireIntervalTicks: FIRE_INTERVAL_TICKS,
     spreadRad: 0.012,
     reloadTicks: 72,
+    magSize: 30,
     range: RIFLE_RANGE,
     projectile: false,
   },
@@ -41,6 +44,7 @@ export const WEAPON_DEFINITIONS: readonly [WeaponDefinition, WeaponDefinition, W
     fireIntervalTicks: 4,
     spreadRad: 0.028,
     reloadTicks: 84,
+    magSize: 25,
     range: 90,
     projectile: false,
   },
@@ -52,6 +56,7 @@ export const WEAPON_DEFINITIONS: readonly [WeaponDefinition, WeaponDefinition, W
     fireIntervalTicks: ROCKET_COOLDOWN_TICKS,
     spreadRad: 0.004,
     reloadTicks: ROCKET_COOLDOWN_TICKS,
+    magSize: 1,
     range: 120,
     projectile: true,
   },
