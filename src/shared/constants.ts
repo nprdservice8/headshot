@@ -31,6 +31,10 @@ export const EYE_HEIGHT = 1.6;
 
 // Movement
 export const WALK_SPEED = 6;
+export const SPRINT_SPEED = 9;
+export const SPRINT_FOV_KICK_DEG = 7;
+export const ADS_FOV_DEG = 62;
+export const ADS_TRANSITION_PER_SEC = 13;
 export const GROUND_ACCEL = 14;
 export const AIR_ACCEL = 2;
 export const JUMP_SPEED = 6.5;
@@ -56,6 +60,15 @@ export const MAX_HP = 100;
 export const BODY_DAMAGE = 25;
 export const FIRE_INTERVAL_TICKS = 8;
 export const RIFLE_RANGE = 150;
+export const ROCKET_SPEED = 42;
+export const ROCKET_RADIUS = 0.14;
+export const ROCKET_LIFETIME_TICKS = 3 * TICK_RATE;
+export const ROCKET_COOLDOWN_TICKS = 90;
+export const ROCKETS_PER_LIFE = 3;
+export const MAX_LIVE_ROCKETS = 12;
+export const ROCKET_EXPLOSION_RADIUS = 5;
+export const ROCKET_EXPLOSION_MAX_DAMAGE = 125;
+export const ROCKET_EXPLOSION_KNOCKBACK = 16;
 
 // Grenades and explosions
 export const GRENADES_PER_LIFE = 2;

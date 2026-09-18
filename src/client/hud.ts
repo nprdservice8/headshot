@@ -27,6 +27,10 @@ const resumeBtn = getElement("resume-btn", HTMLButtonElement);
 const exitBtn = getElement("exit-btn", HTMLButtonElement);
 const scoreboard = getElement("scoreboard", HTMLDivElement);
 const scoreboardRows = getElement("scoreboard-rows", HTMLTableSectionElement);
+const weaponName = getElement("weapon-name", HTMLSpanElement);
+const weaponAmmo = getElement("weapon-ammo", HTMLSpanElement);
+const weaponSlots = getElement("weapon-slots", HTMLDivElement);
+const crosshair = getElement("crosshair", HTMLDivElement);
 
 const FLASH_MS = 220;
 
@@ -34,6 +38,8 @@ const FLASH_MS = 220;
 let shownHp = -1;
 let shownGrenades = -1;
 let shownCenterMessage = "";
+let shownWeapon = -1;
+let shownRockets = -1;
 
 export function showDirectionalIndicator(angleRad: number): void {
   const arc = document.createElement("div");
@@ -109,6 +115,21 @@ export function setGrenades(value: number): void {
   if (value === shownGrenades) return;
   shownGrenades = value;
   grenades.textContent = String(value);
+}
+
+export function setWeapon(weapon: number, rockets: number, ads: boolean, sprinting: boolean): void {
+  if (weapon !== shownWeapon || rockets !== shownRockets) {
+    shownWeapon = weapon;
+    shownRockets = rockets;
+    const names = ["RIFLE", "SMG", "BAZOOKA"];
+    weaponName.textContent = names[weapon] ?? "RIFLE";
+    weaponAmmo.textContent = weapon === 2 ? `${rockets} ROCKETS` : "∞ AMMO";
+    for (const slot of weaponSlots.children) {
+      slot.classList.toggle("selected", Number((slot as HTMLElement).dataset.weapon) === weapon);
+    }
+  }
+  crosshair.classList.toggle("ads", ads);
+  crosshair.classList.toggle("sprinting", sprinting);
 }
 
 export function flashHitmarker(head: boolean): void {

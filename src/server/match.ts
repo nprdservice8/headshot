@@ -2,8 +2,6 @@ import type { RigidBody, World } from "@dimforge/rapier3d-compat";
 import RAPIER from "@dimforge/rapier3d-compat";
 import {
   createHistory,
-  explosionDamage,
-  explosionKnockback,
   type PositionHistory,
   rayHitsSphere,
   rayHitsUprightCapsule,
@@ -15,13 +13,11 @@ import {
 import {
   BODY_BOTTOM_Y,
   BODY_CENTER_Y,
-  BODY_DAMAGE,
   BODY_RADIUS,
   BODY_TOP_Y,
   EXPLOSION_MIN_LIFT,
   EXPLOSION_RADIUS,
   EYE_HEIGHT,
-  FIRE_INTERVAL_TICKS,
   GRENADE_ANGULAR_DAMPING,
   GRENADE_FRICTION,
   GRENADE_FUSE_TICKS,
@@ -42,10 +38,17 @@ import {
   MAX_HP,
   MAX_INPUT_QUEUE,
   MAX_LIVE_GRENADES,
+  MAX_LIVE_ROCKETS,
   MAX_PLAYERS,
   MAX_REWIND_TICKS,
   RESPAWN_DELAY_TICKS,
-  RIFLE_RANGE,
+  ROCKET_EXPLOSION_KNOCKBACK,
+  ROCKET_EXPLOSION_MAX_DAMAGE,
+  ROCKET_EXPLOSION_RADIUS,
+  ROCKET_LIFETIME_TICKS,
+  ROCKET_RADIUS,
+  ROCKET_SPEED,
+  ROCKETS_PER_LIFE,
   SNAPSHOT_INTERVAL_TICKS,
   SPAWN_SAFE_DISTANCE,
 } from "../shared/constants.ts";
@@ -64,6 +67,7 @@ import {
   type InputMessage,
   MOVEMENT_BUTTONS,
   type PlayerSnapshot,
+  type RocketSnapshot,
   type RosterEntry,
   type ServerMessage,
 } from "../shared/protocol.ts";
@@ -74,6 +78,7 @@ import {
   SPAWN_POINTS,
   type SpawnPoint,
 } from "../shared/world.ts";
+import { WEAPON, weaponDefinition, type WeaponId } from "../shared/weapons.ts";
 
 /** How the match talks to the outside world. The server wires this to sockets; tests record it. */
 export type Transport = {
@@ -90,6 +95,10 @@ export type Player = {
   alive: boolean;
   hp: number;
   grenades: number;
+  rockets: number;
+  weapon: WeaponId;
+  ads: boolean;
+  sprinting: boolean;
   kills: number;
   deaths: number;
   inputs: InputMessage[];
@@ -106,6 +115,18 @@ export type Player = {
 };
 
 export type Grenade = { id: number; ownerId: number; body: RigidBody; explodeTick: number };
+/** Bazooka rockets are straight, server-simulated projectiles with swept collision each tick. */
+export type Rocket = {
+  id: number;
+  ownerId: number;
+  x: number;
+  y: number;
+  z: number;
+  dx: number;
+  dy: number;
+  dz: number;
+  expireTick: number;
+};
 
 export type Match = {
   tick: number;
@@ -113,6 +134,7 @@ export type Match = {
   mover: Mover;
   players: Map<number, Player>;
   grenades: Grenade[];
+  rockets: Rocket[];
   nextPlayerId: number;
   nextGrenadeId: number;
   state: "playing" | "ended";
@@ -137,6 +159,7 @@ export function createMatch(transport: Transport, random: () => number = Math.ra
     mover: createMover(world),
     players: new Map(),
     grenades: [],
+    rockets: [],
     nextPlayerId: 1,
     nextGrenadeId: 1,
     state: "playing",
@@ -159,6 +182,10 @@ export function addPlayer(match: Match, name: string): Player | null {
     alive: false,
     hp: 0,
     grenades: 0,
+    rockets: 0,
+    weapon: WEAPON.RIFLE,
+    ads: false,
+    sprinting: false,
     kills: 0,
     deaths: 0,
     inputs: [],
@@ -211,6 +238,7 @@ export function tickMatch(match: Match): void {
 
   match.world.step();
   updateGrenades(match);
+  updateRockets(match);
 
   if (match.tick % SNAPSHOT_INTERVAL_TICKS === 0) sendSnapshots(match);
 }
@@ -225,6 +253,7 @@ function updatePlayer(match: Match, player: Player): void {
     player.pitch = input.pitch;
     player.viewTick = input.viewTick;
     player.heldButtons = input.buttons;
+    player.weapon = input.weapon as WeaponId;
     buttons = input.buttons;
   } else {
     // Late inputs: keep walking briefly so network jitter doesn't stop the player, but never shoot.
@@ -233,14 +262,25 @@ function updatePlayer(match: Match, player: Player): void {
       player.missedInputTicks <= INPUT_REPEAT_TICKS ? player.heldButtons & MOVEMENT_BUTTONS : 0;
   }
 
+  player.ads = (buttons & BUTTON.ADS) !== 0;
+  player.sprinting =
+    (buttons & BUTTON.SPRINT) !== 0 && !player.ads && (buttons & MOVEMENT_BUTTONS) !== 0;
+
   if (!player.alive) {
     if (match.state === "playing" && match.tick >= player.respawnTick) respawn(match, player);
   } else {
-    stepMovement(match.mover, player.move, buttons, player.yaw);
+    stepMovement(match.mover, player.move, buttons, player.yaw, player.sprinting);
     if (match.state === "playing") {
       if (buttons & BUTTON.FIRE && match.tick >= player.nextFireTick) {
-        player.nextFireTick = match.tick + FIRE_INTERVAL_TICKS;
-        fireRifle(match, player);
+        const weapon = weaponDefinition(player.weapon);
+        if (
+          weapon.id !== WEAPON.BAZOOKA ||
+          (player.rockets > 0 && match.rockets.length < MAX_LIVE_ROCKETS)
+        ) {
+          player.nextFireTick = match.tick + weapon.fireIntervalTicks;
+          if (weapon.id === WEAPON.BAZOOKA) fireBazooka(match, player);
+          else fireHitscan(match, player);
+        }
       }
       const grenadePressed = buttons & BUTTON.GRENADE && !(player.previousButtons & BUTTON.GRENADE);
       if (grenadePressed && player.grenades > 0 && match.grenades.length < MAX_LIVE_GRENADES) {
@@ -252,15 +292,21 @@ function updatePlayer(match: Match, player: Player): void {
 }
 
 /** Tests the shot against where targets were on the shooter's screen, then against the arena. */
-function fireRifle(match: Match, shooter: Player): void {
+function fireHitscan(match: Match, shooter: Player): void {
+  const weapon = weaponDefinition(shooter.weapon);
   const eyeX = shooter.move.x;
   const eyeY = shooter.move.y + EYE_HEIGHT;
   const eyeZ = shooter.move.z;
-  viewDirection(shooter.yaw, shooter.pitch, direction);
+  const spread = weapon.spreadRad * (shooter.ads ? 0.35 : 1);
+  // Stable pseudo-random offsets let every client predict the same visual spread without trusting it.
+  const seed = Math.sin((match.tick + shooter.id * 31) * 12.9898) * 43758.5453;
+  const offsetYaw = (seed - Math.floor(seed) - 0.5) * spread;
+  const offsetPitch = Math.sin(seed * 91.7) * 0.5 * spread;
+  viewDirection(shooter.yaw + offsetYaw, shooter.pitch + offsetPitch, direction);
   const newestTick = match.tick - 1;
   const rewindTick = clamp(shooter.viewTick, newestTick - MAX_REWIND_TICKS, newestTick);
 
-  let nearest = RIFLE_RANGE;
+  let nearest = weapon.range;
   let target: Player | null = null;
   let head = false;
   for (const other of match.players.values()) {
@@ -323,8 +369,38 @@ function fireRifle(match: Match, shooter: Player): void {
   });
 
   if (target && nearest <= wallDistance) {
-    damagePlayer(match, target, head ? MAX_HP : BODY_DAMAGE, shooter, head, "rifle", direction);
+    damagePlayer(match, target, head ? MAX_HP : weapon.damage, shooter, head, "rifle", direction);
   }
+}
+
+function fireBazooka(match: Match, shooter: Player): void {
+  shooter.rockets--;
+  viewDirection(shooter.yaw, shooter.pitch, direction);
+  const eyeX = shooter.move.x;
+  const eyeY = shooter.move.y + EYE_HEIGHT;
+  const eyeZ = shooter.move.z;
+  const clearance = castWorldRay(
+    match.world,
+    eyeX,
+    eyeY,
+    eyeZ,
+    direction.x,
+    direction.y,
+    direction.z,
+    0.65,
+  );
+  const distance = Math.max(0.05, clearance - ROCKET_RADIUS);
+  match.rockets.push({
+    id: match.nextGrenadeId++,
+    ownerId: shooter.id,
+    x: eyeX + direction.x * distance,
+    y: eyeY + direction.y * distance,
+    z: eyeZ + direction.z * distance,
+    dx: direction.x,
+    dy: direction.y,
+    dz: direction.z,
+    expireTick: match.tick + ROCKET_LIFETIME_TICKS,
+  });
 }
 
 function throwGrenade(match: Match, thrower: Player): void {
@@ -387,10 +463,94 @@ function updateGrenades(match: Match): void {
   }
 }
 
+function updateRockets(match: Match): void {
+  const distance = ROCKET_SPEED / 60;
+  for (let i = match.rockets.length - 1; i >= 0; i--) {
+    const rocket = match.rockets[i];
+    if (!rocket) continue;
+    let hit = match.tick >= rocket.expireTick;
+    if (!hit) {
+      const wall = castWorldRay(
+        match.world,
+        rocket.x,
+        rocket.y,
+        rocket.z,
+        rocket.dx,
+        rocket.dy,
+        rocket.dz,
+        distance + ROCKET_RADIUS,
+      );
+      if (wall < distance + ROCKET_RADIUS) hit = true;
+      for (const player of match.players.values()) {
+        if (!player.alive) continue;
+        const body = rayHitsUprightCapsule(
+          rocket.x,
+          rocket.y,
+          rocket.z,
+          rocket.dx,
+          rocket.dy,
+          rocket.dz,
+          player.move.x,
+          player.move.z,
+          player.move.y + BODY_BOTTOM_Y,
+          player.move.y + BODY_TOP_Y,
+          BODY_RADIUS + ROCKET_RADIUS,
+        );
+        if (body <= distance) {
+          hit = true;
+          break;
+        }
+      }
+    }
+    if (hit) {
+      const last = match.rockets.pop();
+      if (last && last !== rocket) match.rockets[i] = last;
+      explodeAt(
+        match,
+        rocket.ownerId,
+        rocket.x,
+        rocket.y,
+        rocket.z,
+        ROCKET_EXPLOSION_RADIUS,
+        ROCKET_EXPLOSION_MAX_DAMAGE,
+        ROCKET_EXPLOSION_KNOCKBACK,
+        "bazooka",
+      );
+    } else {
+      rocket.x += rocket.dx * distance;
+      rocket.y += rocket.dy * distance;
+      rocket.z += rocket.dz * distance;
+    }
+  }
+}
+
 function explode(match: Match, grenade: Grenade): void {
   grenade.body.translation(grenadePosition);
   match.world.removeRigidBody(grenade.body);
-  const { x, y, z } = grenadePosition;
+  explodeAt(
+    match,
+    grenade.ownerId,
+    grenadePosition.x,
+    grenadePosition.y,
+    grenadePosition.z,
+    EXPLOSION_RADIUS,
+    110,
+    12,
+    "grenade",
+  );
+}
+
+function explodeAt(
+  match: Match,
+  ownerId: number,
+  x: number,
+  y: number,
+  z: number,
+  radius: number,
+  maxDamage: number,
+  maxKnockback: number,
+  cause: "grenade" | "bazooka",
+): void {
   match.transport.broadcast({
     type: "explosion",
     tick: match.tick,
@@ -399,14 +559,14 @@ function explode(match: Match, grenade: Grenade): void {
     z: round2(z),
   });
 
-  const owner = match.players.get(grenade.ownerId);
+  const owner = match.players.get(ownerId);
   for (const player of match.players.values()) {
     if (!player.alive) continue;
     const dx = player.move.x - x;
     const dy = player.move.y + BODY_CENTER_Y - y;
     const dz = player.move.z - z;
     const distance = Math.hypot(dx, dy, dz);
-    if (distance >= EXPLOSION_RADIUS) continue;
+    if (distance >= radius) continue;
     if (distance > 0.01) {
       direction.x = dx / distance;
       direction.y = dy / distance;
@@ -427,12 +587,13 @@ function explode(match: Match, grenade: Grenade): void {
       direction.y = 1;
       direction.z = 0;
     }
-    const push = explosionKnockback(distance);
+    const falloff = 1 - distance / radius;
+    const push = maxKnockback * falloff;
     player.move.vx += direction.x * push;
     player.move.vy += Math.max(direction.y, EXPLOSION_MIN_LIFT) * push;
     player.move.vz += direction.z * push;
     player.move.grounded = false;
-    damagePlayer(match, player, explosionDamage(distance), owner, false, "grenade", direction);
+    damagePlayer(match, player, Math.round(maxDamage * falloff), owner, false, cause, direction);
   }
 }
 
@@ -485,6 +646,10 @@ function respawn(match: Match, player: Player): void {
   player.alive = true;
   player.hp = MAX_HP;
   player.grenades = GRENADES_PER_LIFE;
+  player.rockets = ROCKETS_PER_LIFE;
+  player.weapon = WEAPON.RIFLE;
+  player.ads = false;
+  player.sprinting = false;
   player.spawnTick = match.tick;
   player.nextFireTick = match.tick;
 }
@@ -517,6 +682,7 @@ function endMatch(match: Match, winner: Player): void {
   match.restartTick = match.tick + MATCH_RESTART_TICKS;
   for (const grenade of match.grenades) match.world.removeRigidBody(grenade.body);
   match.grenades.length = 0;
+  match.rockets.length = 0;
   match.transport.broadcast({ type: "match", state: match.state, winnerId: winner.id });
 }
 
@@ -552,6 +718,9 @@ function sendSnapshots(match: Match): void {
       z: round2(p.move.z),
       yaw: round3(p.yaw),
       pitch: round3(p.pitch),
+      weapon: p.weapon,
+      ads: p.ads,
+      sprinting: p.sprinting,
       alive: p.alive,
     });
   }
@@ -565,6 +734,12 @@ function sendSnapshots(match: Match): void {
       z: round2(grenadePosition.z),
     });
   }
+  const rockets: RocketSnapshot[] = match.rockets.map((rocket) => ({
+    id: rocket.id,
+    x: round2(rocket.x),
+    y: round2(rocket.y),
+    z: round2(rocket.z),
+  }));
   for (const p of match.players.values()) {
     // The receiver's own state is sent at full precision: its client replays inputs from it.
     match.transport.send(p.id, {
@@ -582,9 +757,14 @@ function sendSnapshots(match: Match): void {
         alive: p.alive,
         hp: p.hp,
         grenades: p.grenades,
+        rockets: p.rockets,
+        weapon: p.weapon,
+        ads: p.ads,
+        sprinting: p.sprinting,
       },
       players,
       grenades,
+      rockets,
     });
   }
 }

@@ -3,13 +3,13 @@ import { Vector3 } from "three";
 import { viewDirection } from "../shared/combat.ts";
 import {
   EYE_HEIGHT,
-  FIRE_INTERVAL_TICKS,
   MAX_FRAME_MS,
   RAGDOLL_BLAST_SPEED,
   RAGDOLL_SHOT_SPEED,
   RIFLE_RANGE,
   TICK_MS,
 } from "../shared/constants.ts";
+import { weaponDefinition } from "../shared/weapons.ts";
 import { lerp } from "../shared/math.ts";
 import { createMover } from "../shared/movement.ts";
 import {
@@ -26,6 +26,7 @@ import * as effects from "./effects.ts";
 import * as hud from "./hud.ts";
 import {
   consumeButtons,
+  currentWeapon,
   initInput,
   isPointerLocked,
   isScoreboardHeld,
@@ -247,12 +248,12 @@ function fixedTick(nowMs: number): void {
   stepRagdolls(nowMs);
   if (!joined) return;
   const buttons = consumeButtons();
-  net.sendInputAndPredict(buttons, look.yaw, look.pitch, nowMs);
+  net.sendInputAndPredict(buttons, look.yaw, look.pitch, currentWeapon(), nowMs);
 
   // Your own shots show instantly; the server still decides what they hit.
   const canShoot = net.self.alive && match.state === "playing" && localTick >= nextLocalFireTick;
   if (buttons & BUTTON.FIRE && canShoot) {
-    nextLocalFireTick = localTick + FIRE_INTERVAL_TICKS;
+    nextLocalFireTick = localTick + weaponDefinition(currentWeapon()).fireIntervalTicks;
     showOwnShot(nowMs);
   }
 }
@@ -291,6 +292,7 @@ function drawFrame(nowMs: number, alpha: number): void {
   net.processWorldEvents(tick, handleWorldEvent);
   net.forEachOtherPlayer(tick, drawOtherPlayer);
   net.forEachGrenade(tick, render.updateGrenadeView);
+  net.forEachRocket(tick, render.updateRocketView);
   render.removeUnseenGrenades();
 
   net.fadeCorrection(frameDt);
@@ -305,7 +307,9 @@ function drawFrame(nowMs: number, alpha: number): void {
     net.predicted.grounded,
     look.yaw,
     look.pitch,
+    net.self.ads,
   );
+  render.updateCameraFov(frameDt, net.self.ads, net.self.sprinting);
   lastDrawX = x;
   lastDrawZ = z;
 
@@ -327,6 +331,7 @@ function drawFrame(nowMs: number, alpha: number): void {
 
   hud.setHealth(net.self.hp);
   hud.setGrenades(net.self.grenades);
+  hud.setWeapon(net.self.weapon, net.self.rockets, net.self.ads, net.self.sprinting);
   hud.setScoreboardVisible(isScoreboardHeld() || match.state === "ended");
   hud.setClickToPlayVisible(!isPointerLocked());
   if (match.state === "ended") {
