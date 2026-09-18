@@ -307,17 +307,38 @@
       z-index: 10;
     }
 
-    /* Dynamic Crosshair */
+    /* Four-bar crosshair */
     #crosshair {
       position: absolute;
       left: 50%;
       top: 50%;
-      width: 6px;
-      height: 6px;
-      margin: -3px 0 0 -3px;
-      border-radius: 50%;
+      width: 30px;
+      height: 30px;
+      margin: -15px 0 0 -15px;
+      filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.95)) drop-shadow(0 0 6px rgba(255, 255, 255, 0.65));
+    }
+
+    #crosshair::before,
+    #crosshair::after {
+      content: "";
+      position: absolute;
       background: #ffffff;
-      box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.8), 0 0 10px rgba(255, 255, 255, 0.8);
+    }
+
+    #crosshair::before {
+      top: 0;
+      left: 13px;
+      width: 4px;
+      height: 9px;
+      box-shadow: 0 21px 0 #ffffff;
+    }
+
+    #crosshair::after {
+      top: 13px;
+      left: 0;
+      width: 9px;
+      height: 4px;
+      box-shadow: 21px 0 0 #ffffff;
     }
 
     /* Hitmarker */
