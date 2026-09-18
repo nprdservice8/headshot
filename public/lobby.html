@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Headshot — Lobby</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700;900&family=Outfit:wght@400;600;700;900&display=swap" rel="stylesheet" />
+  <style>
+    :root { color: #f2f5fb; background: #05070c; font-family: Outfit, system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { min-height: 100vh; margin: 0; display: grid; place-items: center; overflow: hidden; background: radial-gradient(circle at 20% 10%, #172e40 0%, transparent 28%), radial-gradient(circle at 90% 90%, #3b2412 0%, transparent 25%), #05070c; }
+    body::before { content: ""; position: fixed; inset: 0; opacity: .23; pointer-events: none; background-image: linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px); background-size: 42px 42px; mask-image: linear-gradient(to bottom, black, transparent); }
+    main { width: 90vw; height: 90vh; display: grid; grid-template-columns: minmax(380px, .9fr) minmax(460px, 1.1fr); overflow: hidden; border: 1px solid rgba(178,223,255,.18); border-radius: 28px; background: rgba(8,13,22,.9); box-shadow: 0 34px 110px rgba(0,0,0,.72), inset 0 1px 0 rgba(255,255,255,.07), inset 0 0 90px rgba(0,240,255,.05); }
+    .copy { position: relative; padding: clamp(30px, 5vw, 76px); display: flex; flex-direction: column; align-items: flex-start; justify-content: center; border-right: 1px solid rgba(255,255,255,.09); background: linear-gradient(145deg, rgba(18,33,48,.55), rgba(8,13,22,.2)); }
+    .copy::before { content: ""; position: absolute; left: 0; top: 12%; bottom: 12%; width: 3px; background: linear-gradient(transparent, #00f0ff, transparent); box-shadow: 0 0 18px #00f0ff; }
+    .eyebrow { display: flex; align-items: center; gap: 9px; margin: 0 0 15px; color: #00f0ff; font: 700 12px "Chakra Petch", sans-serif; letter-spacing: .2em; }
+    .eyebrow::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #58ff9c; box-shadow: 0 0 12px #58ff9c; }
+    h1 { margin: 0; font: 900 clamp(45px, 5.8vw, 92px)/.85 "Chakra Petch", sans-serif; letter-spacing: .04em; text-shadow: 0 8px 30px rgba(0,0,0,.45); }
+    h1 span, #player-name { color: #ffcf4a; }
+    .divider { width: 78px; height: 2px; margin: 30px 0 25px; background: linear-gradient(90deg, #ffcf4a, transparent); }
+    .welcome { margin: 0 0 8px; font-size: clamp(18px, 1.7vw, 25px); font-weight: 700; }
+    .desc { max-width: 420px; margin: 0 0 34px; color: #94a3b8; line-height: 1.65; font-size: 15px; }
+    .actions { width: min(340px, 100%); display: grid; gap: 10px; }
+    button { width: 100%; border: 0; border-radius: 11px; padding: 16px 20px; cursor: pointer; color: #0b0f19; background: linear-gradient(135deg,#ffe179,#ee9e19); box-shadow: 0 10px 30px rgba(255,207,74,.3); font: 700 17px "Chakra Petch", sans-serif; letter-spacing: .08em; text-transform: uppercase; transition: transform .2s ease, filter .2s ease; }
+    button:hover { transform: translateY(-2px); filter: brightness(1.08); }
+    #logout-btn { color: #94a3b8; border: 1px solid rgba(255,255,255,.16); background: transparent; box-shadow: none; font-size: 12px; padding: 11px 15px; }
+    .settings-link { display: grid; place-items: center; width: 100%; border: 1px solid rgba(0,240,255,.42); border-radius: 11px; padding: 12px 20px; color: #00f0ff; text-decoration: none; font: 700 12px "Chakra Petch", sans-serif; letter-spacing: .1em; text-transform: uppercase; transition: background .2s ease; }
+    .settings-link:hover { background: rgba(0,240,255,.09); }
+    .preview { min-height: 0; position: relative; overflow: hidden; background: radial-gradient(ellipse at 50% 50%, rgba(0,240,255,.19), transparent 47%), linear-gradient(180deg, rgba(5,9,15,.1), rgba(5,9,15,.7)); }
+    .preview::before { content: ""; position: absolute; inset: 9%; border: 1px solid rgba(0,240,255,.13); border-radius: 50%; box-shadow: inset 0 0 55px rgba(0,240,255,.08); pointer-events: none; }
+    .preview::after { content: "OPERATIVE READY  //  LOADOUT SYNCHRONIZED"; position: absolute; bottom: 30px; width: 100%; text-align: center; color: #00f0ff; font: 700 11px "Chakra Petch", sans-serif; letter-spacing: .19em; pointer-events: none; }
+    canvas { width: 100%; height: 100%; display: block; }
+    @media (max-width: 760px) { body { overflow: auto; padding: 5vh 0; } main { width: 92vw; height: auto; min-height: 90vh; grid-template-columns: 1fr; } .copy { order: 2; padding: 42px 28px; border: 0; } .preview { order: 1; height: 48vh; min-height: 360px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="copy">
+      <p class="eyebrow">MULTIPLAYER STAGING</p>
+      <h1>HEAD<span>SHOT</span></h1>
+      <div class="divider"></div>
+      <p class="welcome">Welcome back, <span id="player-name"></span>.</p>
+      <p class="desc">Review your operative, then deploy into the next tactical match.</p>
+      <div class="actions">
+        <button id="start-game" type="button">Start Game</button>
+        <a class="settings-link" href="/settings.html">Settings &amp; Controls</a>
+        <button id="logout-btn" type="button">Log out</button>
+      </div>
+    </section>
+    <section class="preview" aria-label="Your character preview"><canvas id="character-preview"></canvas></section>
+  </main>
+  <script type="module" src="/dist/lobby.js"></script>
+</body>
+</html>

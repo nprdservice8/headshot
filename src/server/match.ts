@@ -28,6 +28,9 @@ import {
   GRENADE_THROW_LIFT,
   GRENADE_THROW_SPEED,
   GRENADES_PER_LIFE,
+  HEALTH_REGEN_DELAY_TICKS,
+  HEALTH_REGEN_INTERVAL_TICKS,
+  HEALTH_REGEN_TRIGGER_HP,
   GROUP_GRENADE,
   GROUP_WORLD,
   HEAD_CENTER_Y,
@@ -109,6 +112,8 @@ export type Player = {
   viewTick: number;
   missedInputTicks: number;
   nextFireTick: number;
+  regenTick: number;
+  regenerating: boolean;
   respawnTick: number;
   spawnTick: number;
   history: PositionHistory;
@@ -196,6 +201,8 @@ export function addPlayer(match: Match, name: string): Player | null {
     viewTick: match.tick,
     missedInputTicks: 0,
     nextFireTick: 0,
+    regenTick: 0,
+    regenerating: false,
     respawnTick: 0,
     spawnTick: 0,
     history: createHistory(),
@@ -270,6 +277,11 @@ function updatePlayer(match: Match, player: Player): void {
     if (match.state === "playing" && match.tick >= player.respawnTick) respawn(match, player);
   } else {
     stepMovement(match.mover, player.move, buttons, player.yaw, player.sprinting);
+    if (player.regenerating && match.tick >= player.regenTick) {
+      player.hp = Math.min(MAX_HP, player.hp + 1);
+      player.regenerating = player.hp < MAX_HP;
+      if (player.regenerating) player.regenTick = match.tick + HEALTH_REGEN_INTERVAL_TICKS;
+    }
     if (match.state === "playing") {
       if (buttons & BUTTON.FIRE && match.tick >= player.nextFireTick) {
         const weapon = weaponDefinition(player.weapon);
@@ -608,6 +620,8 @@ function damagePlayer(
 ): void {
   if (!target.alive || amount <= 0) return;
   target.hp = Math.max(0, target.hp - amount);
+  target.regenTick = match.tick + HEALTH_REGEN_DELAY_TICKS;
+  target.regenerating = target.hp > 0 && target.hp < HEALTH_REGEN_TRIGGER_HP;
   if (attacker && attacker !== target) {
     match.transport.send(attacker.id, { type: "hit", targetId: target.id, head, damage: amount });
   }
@@ -652,6 +666,8 @@ function respawn(match: Match, player: Player): void {
   player.sprinting = false;
   player.spawnTick = match.tick;
   player.nextFireTick = match.tick;
+  player.regenTick = match.tick;
+  player.regenerating = false;
 }
 
 /** A random spawn point with no living enemy nearby, or any spawn point if none is safe. */

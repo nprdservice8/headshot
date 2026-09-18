@@ -10,7 +10,13 @@ export function getElement<T extends HTMLElement>(id: string, type: { new (): T 
 
 const menu = getElement("menu", HTMLFormElement);
 const nameInput = getElement("name", HTMLInputElement);
+const nameLabel = getElement("name-label", HTMLLabelElement);
+const emailInput = getElement("email", HTMLInputElement);
+const passwordInput = getElement("password", HTMLInputElement);
+const loginTab = getElement("login-tab", HTMLButtonElement);
+const signupTab = getElement("signup-tab", HTMLButtonElement);
 const playButton = getElement("play", HTMLButtonElement);
+const guestPlayButton = getElement("guest-play", HTMLButtonElement);
 const menuStatus = getElement("menu-status", HTMLParagraphElement);
 const hud = getElement("hud", HTMLDivElement);
 const hp = getElement("hp", HTMLSpanElement);
@@ -62,13 +68,145 @@ export function showDirectionalIndicator(angleRad: number): void {
   setTimeout(() => arc.remove(), 1200);
 }
 
-export function onPlay(handler: (name: string) => void, savedName: string): void {
-  nameInput.value = savedName;
+type Account = { name: string; email: string; password: string };
+
+const ACCOUNT_STORAGE_KEY = "headshot.accounts";
+const SESSION_STORAGE_KEY = "headshot.current-account";
+const GUEST_STORAGE_KEY = "headshot.guest-name";
+let signupMode = false;
+let currentAccount: Account | null = null;
+let currentGuestName: string | null = null;
+
+function readAccounts(): Account[] {
+  try {
+    const accounts: unknown = JSON.parse(localStorage.getItem(ACCOUNT_STORAGE_KEY) ?? "[]");
+    if (!Array.isArray(accounts)) return [];
+    return accounts.filter(
+      (account): account is Account =>
+        typeof account === "object" &&
+        account !== null &&
+        typeof account.name === "string" &&
+        typeof account.email === "string" &&
+        typeof account.password === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
+function setMode(signup: boolean): void {
+  signupMode = signup;
+  nameInput.hidden = !signup;
+  nameLabel.hidden = !signup;
+  nameInput.required = signup;
+  passwordInput.autocomplete = signup ? "new-password" : "current-password";
+  passwordInput.placeholder = signup ? "At least 6 characters" : "Enter your password";
+  loginTab.classList.toggle("active", !signup);
+  signupTab.classList.toggle("active", signup);
+  loginTab.setAttribute("aria-selected", String(!signup));
+  signupTab.setAttribute("aria-selected", String(signup));
+  playButton.textContent = signup ? "Create account & play" : "Log in & play";
+  setMenuStatus("");
+}
+
+function saveSession(account: Account): void {
+  try {
+    localStorage.setItem(SESSION_STORAGE_KEY, account.email);
+  } catch {
+    // The player can still use this session, but it won't persist after a refresh.
+  }
+}
+
+function openLobby(account: Account): void {
+  currentAccount = account;
+  saveSession(account);
+  location.assign("/lobby.html");
+}
+
+function restoreSession(): void {
+  try {
+    const email = localStorage.getItem(SESSION_STORAGE_KEY);
+    const account = readAccounts().find((entry) => entry.email === email);
+    const guestName = sessionStorage.getItem(GUEST_STORAGE_KEY)?.trim() ?? "";
+    if (!account && guestName.length === 0) return;
+    if (new URLSearchParams(location.search).has("play")) {
+      currentAccount = account;
+      currentGuestName = account ? null : guestName;
+      return;
+    }
+    if (account) openLobby(account);
+    else location.assign("/lobby.html");
+  } catch {
+    // No saved session is expected when browser storage is unavailable.
+  }
+}
+
+/**
+ * Accounts are stored in localStorage because this game currently has no account service.
+ * A production version should move password handling to a server using a password hash.
+ */
+export function onPlay(handler: (name: string) => void): void {
+  loginTab.addEventListener("click", () => setMode(false));
+  signupTab.addEventListener("click", () => setMode(true));
   menu.addEventListener("submit", (event) => {
     event.preventDefault();
     const name = nameInput.value.trim();
-    if (name.length > 0) handler(name);
+    const email = emailInput.value.trim().toLowerCase();
+    const password = passwordInput.value;
+    if (!emailInput.validity.valid) {
+      setMenuStatus("Enter a valid email address.");
+      return;
+    }
+    const accounts = readAccounts();
+    if (signupMode) {
+      if (name.length < 2) {
+        setMenuStatus("Enter a name with at least 2 characters.");
+        return;
+      }
+      if (password.length < 6) {
+        setMenuStatus("Your password needs at least 6 characters.");
+        return;
+      }
+      if (accounts.some((account) => account.email === email)) {
+        setMenuStatus("An account already exists for this email. Please log in.");
+        return;
+      }
+      try {
+        accounts.push({ name, email, password });
+        localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(accounts));
+      } catch {
+        setMenuStatus("Could not save your account in this browser.");
+        return;
+      }
+      openLobby({ name, email, password });
+      return;
+    }
+    const account = accounts.find((entry) => entry.email === email && entry.password === password);
+    if (!account) {
+      setMenuStatus("Email or password is incorrect. Please try again.");
+      return;
+    }
+    openLobby(account);
   });
+  guestPlayButton.addEventListener("click", () => {
+    const name = `Guest-${Math.floor(1000 + Math.random() * 9000)}`;
+    try {
+      localStorage.removeItem(SESSION_STORAGE_KEY);
+      sessionStorage.setItem(GUEST_STORAGE_KEY, name);
+    } catch {
+      // The guest can still play until this page is refreshed.
+      currentGuestName = name;
+      handler(name);
+      return;
+    }
+    location.assign("/lobby.html");
+  });
+  setMode(false);
+  restoreSession();
+  if (new URLSearchParams(location.search).has("play")) {
+    const name = currentAccount?.name ?? currentGuestName;
+    if (name) handler(name);
+  }
 }
 
 export function onResume(handler: () => void): void {
@@ -88,7 +226,8 @@ export function setPauseVisible(visible: boolean): void {
 
 export function setMenuReady(): void {
   playButton.disabled = false;
-  playButton.textContent = "Play";
+  guestPlayButton.disabled = false;
+  setMode(signupMode);
 }
 
 export function setMenuStatus(status: string): void {

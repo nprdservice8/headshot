@@ -100,9 +100,9 @@
 
     .menu-body {
       display: grid;
-      grid-template-columns: 1fr 1.1fr;
+      grid-template-columns: minmax(280px, 420px);
       gap: 24px;
-      align-items: start;
+      justify-content: center;
     }
 
     .menu-panel {
@@ -110,6 +110,41 @@
       flex-direction: column;
       gap: 12px;
       text-align: left;
+    }
+
+    #auth-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .auth-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    #menu button.auth-tab {
+      padding: 10px 12px;
+      font-size: 13px;
+      background: rgba(255, 255, 255, 0.07);
+      color: var(--muted);
+      box-shadow: none;
+    }
+
+    #menu button.auth-tab.active {
+      background: rgba(0, 240, 255, 0.14);
+      border: 1px solid var(--cyan);
+      color: var(--cyan);
+    }
+
+    #menu button.guest-button {
+      padding: 10px 14px;
+      border: 1px solid var(--panel-border);
+      background: transparent;
+      box-shadow: none;
+      color: var(--muted);
+      font-size: 13px;
     }
 
     .input-label {
@@ -888,44 +923,23 @@
 
       <div class="menu-body">
         <div class="menu-panel left-panel">
-          <label for="name" class="input-label">OPERATIVE CALLSIGN</label>
-          <input id="name" maxlength="16" autocomplete="off" placeholder="Enter callsign" required />
-          <button id="play" type="submit" disabled>Loading…</button>
-          <p id="menu-status"></p>
-        </div>
-
-        <div class="menu-panel right-panel">
-          <div class="controls-title">CONTROLS &amp; SHORTCUTS</div>
-          <div class="controls-list">
-            <div class="control-row"><span class="control-label">Move</span>
-              <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div>
+          <div id="auth-panel">
+            <div class="auth-tabs" role="tablist" aria-label="Account access">
+              <button id="login-tab" class="auth-tab active" type="button" role="tab" aria-selected="true">Log in</button>
+              <button id="signup-tab" class="auth-tab" type="button" role="tab" aria-selected="false">Sign up</button>
             </div>
-            <div class="control-row"><span class="control-label">Aim / Look</span>
-              <div><kbd>Mouse</kbd></div>
-            </div>
-            <div class="control-row"><span class="control-label">Fire Weapon</span>
-              <div><kbd>L-Click</kbd></div>
-            </div>
-            <div class="control-row"><span class="control-label">ADS / Sprint</span>
-              <div><kbd>R-Click</kbd><kbd>Shift</kbd></div>
-            </div>
-            <div class="control-row"><span class="control-label">Weapon Select</span>
-              <div><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></div>
-            </div>
-            <div class="control-row"><span class="control-label">Jump</span>
-              <div><kbd>Space</kbd></div>
-            </div>
-            <div class="control-row"><span class="control-label">Grenade</span>
-              <div><kbd>G</kbd></div>
-            </div>
-            <div class="control-row"><span class="control-label">Leaderboard</span>
-              <div><kbd>Tab</kbd></div>
-            </div>
-            <div class="control-row"><span class="control-label">Pause / Unlock</span>
-              <div><kbd>Esc</kbd></div>
-            </div>
+            <label id="name-label" for="name" class="input-label" hidden>OPERATIVE CALLSIGN</label>
+            <input id="name" maxlength="16" autocomplete="name" placeholder="Enter your name" required hidden />
+            <label for="email" class="input-label">EMAIL</label>
+            <input id="email" type="email" autocomplete="email" placeholder="you@example.com" required />
+            <label for="password" class="input-label">PASSWORD</label>
+            <input id="password" type="password" minlength="6" autocomplete="current-password" placeholder="At least 6 characters" required />
+            <button id="play" type="submit" disabled>Loading…</button>
+            <button id="guest-play" class="guest-button" type="button" disabled>Play as Guest</button>
+            <p id="menu-status"></p>
           </div>
         </div>
+
       </div>
     </div>
   </form>

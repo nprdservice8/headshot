@@ -57,6 +57,11 @@ export const BODY_CENTER_Y = 0.9;
 
 // Rifle
 export const MAX_HP = 100;
+/** Health must be below this amount when hit to begin regeneration. */
+export const HEALTH_REGEN_TRIGGER_HP = 50;
+export const HEALTH_REGEN_DELAY_TICKS = 5 * TICK_RATE;
+/** One health point every fifth of a second after regeneration starts. */
+export const HEALTH_REGEN_INTERVAL_TICKS = TICK_RATE / 5;
 export const BODY_DAMAGE = 25;
 export const FIRE_INTERVAL_TICKS = 8;
 export const RIFLE_RANGE = 150;

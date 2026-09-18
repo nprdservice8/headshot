@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Headshot — Settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700;900&family=Outfit:wght@400;600;700;900&display=swap" rel="stylesheet" />
+  <style>
+    :root { color: #f2f5fb; background: #070a0f; font-family: Outfit, system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { min-height: 100vh; margin: 0; padding: 28px 16px; background: radial-gradient(circle at 50% 15%, #18273b 0%, #070a0f 65%); }
+    main { width: min(700px, 100%); margin: 0 auto; padding: clamp(24px, 5vw, 44px); border: 1px solid rgba(255,255,255,.14); border-radius: 24px; background: rgba(10,14,23,.86); box-shadow: 0 28px 80px rgba(0,0,0,.65), inset 0 0 50px rgba(0,240,255,.08); }
+    .eyebrow { margin: 0 0 10px; color: #00f0ff; font: 700 13px "Chakra Petch", sans-serif; letter-spacing: .18em; }
+    h1 { margin: 0 0 30px; font: 900 clamp(36px, 6vw, 54px)/1 "Chakra Petch", sans-serif; letter-spacing: .08em; }
+    h1 span { color: #ffcf4a; }
+    .section-title { margin: 0 0 10px; color: #ffcf4a; font: 700 15px "Chakra Petch", sans-serif; letter-spacing: .12em; }
+    .controls { margin-bottom: 28px; border: 1px solid rgba(255,255,255,.1); border-radius: 14px; overflow: hidden; }
+    .row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,.08); color: #cbd5e1; }
+    .row:last-child { border-bottom: 0; }
+    .keys { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
+    kbd { min-width: 27px; padding: 4px 7px; border: 1px solid rgba(255,255,255,.24); border-radius: 5px; background: rgba(255,255,255,.08); color: #ffcf4a; font: 700 12px "Chakra Petch", monospace; text-align: center; }
+    a { display: grid; place-items: center; border-radius: 12px; padding: 14px 20px; color: #0b0f19; background: linear-gradient(135deg,#ffcf4a,#f59e0b); box-shadow: 0 8px 25px rgba(255,207,74,.35); font: 700 16px "Chakra Petch", sans-serif; letter-spacing: .08em; text-decoration: none; text-transform: uppercase; }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">OPERATIVE SETTINGS</p>
+    <h1>CONTROLS <span>&amp; SHORTCUTS</span></h1>
+    <p class="section-title">MOVEMENT</p>
+    <div class="controls">
+      <div class="row"><span>Move</span><span class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span></div>
+      <div class="row"><span>Jump</span><span class="keys"><kbd>Space</kbd></span></div>
+      <div class="row"><span>Sprint</span><span class="keys"><kbd>Shift</kbd></span></div>
+    </div>
+    <p class="section-title">COMBAT</p>
+    <div class="controls">
+      <div class="row"><span>Aim / Look</span><span class="keys"><kbd>Mouse</kbd></span></div>
+      <div class="row"><span>Fire weapon</span><span class="keys"><kbd>L-Click</kbd></span></div>
+      <div class="row"><span>Aim down sights</span><span class="keys"><kbd>R-Click</kbd></span></div>
+      <div class="row"><span>Select weapon</span><span class="keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span></div>
+      <div class="row"><span>Throw grenade</span><span class="keys"><kbd>G</kbd></span></div>
+    </div>
+    <p class="section-title">MATCH</p>
+    <div class="controls">
+      <div class="row"><span>Leaderboard</span><span class="keys"><kbd>Tab</kbd></span></div>
+      <div class="row"><span>Pause / Unlock mouse</span><span class="keys"><kbd>Esc</kbd></span></div>
+    </div>
+    <a href="/lobby.html">Back to lobby</a>
+  </main>
+</body>
+</html>

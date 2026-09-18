@@ -6,6 +6,8 @@ import {
   EYE_HEIGHT,
   FIRE_INTERVAL_TICKS,
   GRENADE_FUSE_TICKS,
+  HEALTH_REGEN_DELAY_TICKS,
+  HEALTH_REGEN_INTERVAL_TICKS,
   KILLS_TO_WIN,
   MATCH_RESTART_TICKS,
   MAX_HP,
@@ -123,6 +125,25 @@ test("a body shot does body damage and a headshot kills", () => {
   const death = messagesOfType(sent, "death").at(-1);
   assert.equal(death?.head, true);
   assert.equal(death?.killerId, shooter.id);
+});
+
+test("a player hit below 50 HP regenerates gradually to full health after five seconds", () => {
+  const { match, target } = setup();
+  target.hp = 48;
+  target.regenTick = match.tick + HEALTH_REGEN_DELAY_TICKS;
+  target.regenerating = true;
+
+  ticks(match, HEALTH_REGEN_DELAY_TICKS - 1);
+  assert.equal(target.hp, 48);
+  tickMatch(match);
+  assert.equal(target.hp, 49);
+  ticks(match, HEALTH_REGEN_INTERVAL_TICKS - 1);
+  assert.equal(target.hp, 49);
+  tickMatch(match);
+  assert.equal(target.hp, 50);
+  ticks(match, HEALTH_REGEN_INTERVAL_TICKS * 50);
+  assert.equal(target.hp, MAX_HP);
+  assert.equal(target.regenerating, false);
 });
 
 test("lag compensation: a shot hits where the target was on the shooter's screen", () => {

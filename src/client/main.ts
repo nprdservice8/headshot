@@ -45,7 +45,6 @@ import {
 } from "./ragdoll.ts";
 import * as render from "./render.ts";
 
-const NAME_STORAGE_KEY = "headshot.name";
 const DEATH_CAMERA_DISTANCE = 4;
 const DEATH_CAMERA_HEIGHT = 2.5;
 /** Ground probes start this far above the feet, so standing exactly on a surface still hits it. */
@@ -80,7 +79,7 @@ const aim = { x: 0, y: 0, z: 0 };
 const focus = { x: 0, y: 0, z: 0 };
 
 initInput(canvas, () => joined);
-hud.onPlay(play, readSavedName());
+hud.onPlay(play);
 hud.setMenuReady();
 
 hud.onResume(() => {
@@ -88,7 +87,7 @@ hud.onResume(() => {
 });
 
 hud.onExit(() => {
-  location.reload();
+  location.assign("/lobby.html");
 });
 
 document.addEventListener("pointerlockchange", () => {
@@ -103,24 +102,11 @@ function probeGround(x: number, y: number, z: number, max: number): number {
   return castWorldRay(world, x, y + lift, z, 0, -1, 0, max + lift) - lift;
 }
 
-function readSavedName(): string {
-  try {
-    return localStorage.getItem(NAME_STORAGE_KEY) ?? "";
-  } catch {
-    return ""; // Storage can be blocked (private windows); the name just isn't remembered.
-  }
-}
-
 function play(name: string): void {
   // After a disconnect, a fresh page is the simplest way to reset every piece of match state.
   if (disconnected) {
     location.reload();
     return;
-  }
-  try {
-    localStorage.setItem(NAME_STORAGE_KEY, name);
-  } catch {
-    // Not remembering the name is harmless.
   }
   initAudio();
   hud.setMenuStatus("Connecting…");
