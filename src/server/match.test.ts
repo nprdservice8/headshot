@@ -50,7 +50,7 @@ function mustAdd(match: Match, name: string): Player {
   return player;
 }
 
-// Positions below are open floor in the arena (see shared/world.ts).
+// Positions below are open floor in the street north of the temple square (see shared/world.ts).
 function place(match: Match, player: Player, x: number, z: number): void {
   player.move.x = x;
   player.move.y = 0.01;
@@ -100,8 +100,8 @@ function messagesOfType<T extends ServerMessage["type"]>(sent: Sent[], type: T) 
 
 test("a body shot does body damage and a headshot kills", () => {
   const { match, sent, shooter, target } = setup();
-  place(match, shooter, 8, 10);
-  place(match, target, 8, 4);
+  place(match, shooter, -3, -38);
+  place(match, target, -3, -44);
   ticks(match, 20);
 
   input(match, shooter, BUTTON.FIRE, 0, aimPitch(shooter, 0.9, 6));
@@ -127,13 +127,13 @@ test("a body shot does body damage and a headshot kills", () => {
 
 test("lag compensation: a shot hits where the target was on the shooter's screen", () => {
   const { match, shooter, target } = setup();
-  place(match, shooter, 8, 10);
-  place(match, target, 8, 4);
+  place(match, shooter, -3, -38);
+  place(match, target, -3, -44);
   ticks(match, 20);
   const seenAtTick = match.tick;
 
   // The target steps two metres aside; the shooter's screen is still showing the old position.
-  target.move.x = 6;
+  target.move.x = -5;
   ticks(match, 6);
   input(match, shooter, BUTTON.FIRE, 0, aimPitch(shooter, 0.9, 6), seenAtTick);
   tickMatch(match);
@@ -148,20 +148,20 @@ test("lag compensation: a shot hits where the target was on the shooter's screen
 
 test("arena walls block shots", () => {
   const { match, sent, shooter, target } = setup();
-  // The cover wall spanning x = 3..9 at z = 12 stands between them.
-  place(match, shooter, 8, 9);
-  place(match, target, 8, 15);
+  // The burnt-out truck spanning z = -43.9..-36.1 stands between them.
+  place(match, shooter, 3, -34);
+  place(match, target, 3, -44.8);
   ticks(match, 20);
-  input(match, shooter, BUTTON.FIRE, Math.PI, aimPitch(shooter, 0.9, 6));
+  input(match, shooter, BUTTON.FIRE, 0, aimPitch(shooter, 0.9, 10.8));
   tickMatch(match);
   assert.equal(target.hp, MAX_HP);
   const shot = messagesOfType(sent, "shot").at(-1);
-  assert.ok(shot && shot.toZ > 11 && shot.toZ < 12, `shot ended at z = ${shot?.toZ}`);
+  assert.ok(shot && shot.toZ < -35.9 && shot.toZ > -36.4, `shot ended at z = ${shot?.toZ}`);
 });
 
 test("the server enforces the fire rate", () => {
   const { match, sent, shooter } = setup();
-  place(match, shooter, 8, 10);
+  place(match, shooter, -3, -38);
   ticks(match, 5);
   for (let i = 0; i < FIRE_INTERVAL_TICKS * 2; i++) {
     input(match, shooter, BUTTON.FIRE, 0, 0);
@@ -172,8 +172,8 @@ test("the server enforces the fire rate", () => {
 
 test("bazooka fires a swept straight rocket, splashes, and respects its cooldown", () => {
   const { match, sent, shooter, target } = setup();
-  place(match, shooter, 8, 10);
-  place(match, target, 8, 4);
+  place(match, shooter, -3, -38);
+  place(match, target, -3, -44);
   ticks(match, 20);
   input(match, shooter, BUTTON.FIRE, 0, aimPitch(shooter, 0.9, 6), match.tick, 2);
   tickMatch(match);
@@ -190,8 +190,8 @@ test("bazooka fires a swept straight rocket, splashes, and respects its cooldown
 
 test("a grenade explodes after its fuse, hurting and pushing nearby players", () => {
   const { match, sent, shooter, target } = setup();
-  place(match, shooter, 8, 10);
-  place(match, target, 8, 7.5);
+  place(match, shooter, -3, -38);
+  place(match, target, -3, -40.5);
   ticks(match, 5);
   input(match, shooter, BUTTON.GRENADE, 0, -0.9);
   tickMatch(match);
@@ -205,7 +205,7 @@ test("a grenade explodes after its fuse, hurting and pushing nearby players", ()
 
   // Put the target 2 m from the grenade and the thrower far away, so only the target is caught.
   place(match, target, grenade.x, grenade.z + 2);
-  place(match, shooter, -8, -10);
+  place(match, shooter, -3, -60);
   ticks(match, 2);
   assert.equal(match.grenades.length, 0);
   assert.equal(messagesOfType(sent, "explosion").length, 1);
@@ -216,8 +216,8 @@ test("a grenade explodes after its fuse, hurting and pushing nearby players", ()
 
 test("reaching the kill target ends the match, which restarts later", () => {
   const { match, sent, shooter, target } = setup();
-  place(match, shooter, 8, 10);
-  place(match, target, 8, 4);
+  place(match, shooter, -3, -38);
+  place(match, target, -3, -44);
   ticks(match, 20);
   shooter.kills = KILLS_TO_WIN - 1;
   input(match, shooter, BUTTON.FIRE, 0, aimPitch(shooter, 1.6, 6));

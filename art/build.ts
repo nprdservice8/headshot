@@ -13,7 +13,7 @@ import {
   SUN_ELEVATION_DEG,
   SUN_INTENSITY,
 } from "../src/shared/constants.ts";
-import { ARENA_BOXES, ARENA_HALF_SIZE, boxRotation } from "../src/shared/world.ts";
+import { ARENA_BOXES, ARENA_HALF_SIZE, boxRotation, GROUND_PATCHES } from "../src/shared/world.ts";
 
 // Builds public/assets/ from free (CC0) Quaternius models: downloads them, runs the Blender
 // scripts in this folder, then compresses the results.
@@ -44,19 +44,6 @@ const SOURCES: Readonly<Record<string, string>> = {
   "Crate.gltf": "1CARthb8FHddjbfEPG44jbImahtkFfydK",
   "Container_Long.gltf": "10fh-JeIdf_Wwd0gJb72TnGULdD9lcsl3",
   "Container_Small.gltf": "1y0pB6G2lehCu8TuhtCxrbUzn7w7zv_Ci",
-  "StreetLight.gltf": "1Qly9jwFsg_FtUGCC3FQqH77-JjsvZqYL",
-  "Tree_1.gltf": "10sSrs-glet7ueZf-uHUTZ4k3YVYRDKDn",
-  "Tree_2.gltf": "1AnkwZpMBwSpmdHo5oId-twkCBRDwj6Zy",
-  "Tree_3.gltf": "1xfVLSInheARljv_Z9XJn6UKLZHRz6wK4",
-  "Tree_4.gltf": "1xJKn0W84tSGDTCmrHTL9eVZTzCqEQ35V",
-  "Structure_1.gltf": "1k4I26KSjpeLTVHdSUICBUBD9kkW8ux6f",
-  "Structure_2.gltf": "1-bI1hmVSwXrir7nW7EdUR5W2Zn4tUaTR",
-  "Structure_3.gltf": "1E5amjNQ7M8yADXW-W0pdyMwqNP8b4FeX",
-  "Structure_4.gltf": "1LVcys7S3iqpycdvQ8g1bCnweRabw1a7b",
-  "WaterTank_Platform.gltf": "1fg05Fkuw5wwuvNX1Vq_Lobd5vQiVAPSw",
-  "Debris_Papers_1.gltf": "1Y121v6RcknZs3GHyTp4TfFDfpSV02bAG",
-  "Debris_Papers_2.gltf": "1c7CfCbZQ9saUr9AKzaRzHcO2LzFfxucq",
-  "Debris_Papers_3.gltf": "1v0ttRA3iefSoCe6QiKy3t3Axk6xOZLbu",
 };
 
 const args = process.argv.slice(2);
@@ -84,6 +71,7 @@ async function download(): Promise<void> {
 function writeLayout(): void {
   const layout = {
     halfSize: ARENA_HALF_SIZE,
+    ground: GROUND_PATCHES,
     boxes: ARENA_BOXES.map((box) => ({ ...box, rotation: boxRotation(box.yaw, box.tilt) })),
     lighting: {
       sunAzimuthDeg: SUN_AZIMUTH_DEG,

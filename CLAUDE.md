@@ -33,7 +33,13 @@ art/                  builds public/assets/ (never shipped)
   build.ts            downloads sources, writes layout.json, runs Blender, compresses
   common.py           Blender helpers: material colours → vertex colours, join, export
   player.py           soldier + animations + IK rifle pose, first-person arms, grenade
-  map.py              dresses world.ts boxes, adds scenery, bakes lighting
+  map.py              builds the map: dresses every world.ts box, bakes lighting, exports
+  mesh.py             the map's mesh helpers and per-face lighting flags
+  arena.py            reads layout.json; the map's palette and layout helpers
+  buildings.py        dressing: ground, houses, roofs, gates, ruins, plinths, stairs, rubble
+  temples.py          dressing: pagodas, the stupa, the shikhara, pillars
+  props.py            dressing: sandbags, crates, containers, burnt-out vehicles, tents
+  scenery.py          unreachable: the city beyond the edge, flags, cables, hills, Himalaya
   source/, out/       downloads and intermediate files (git-ignored)
 build.ts              esbuild: production bundle, or watch + server with --dev
 src/
@@ -175,7 +181,7 @@ Hitboxes are not Rapier colliders.
 - Input handlers only record state. The fixed tick acts on it.
 - Update the DOM (HUD, scoreboard, kill feed) only when a value changes, never every frame.
 - **Lighting:**
-  - Static map lighting is baked with Cycles: a lightmap for the arena, vertex colours for the scenery outside the walls. No real-time shadows, no post-processing.
+  - Static map lighting is baked with Cycles: a lightmap for large surfaces players walk on or stand beside, vertex colours for small detail and scenery. The far backdrop (hills, Himalaya) is hazed in the bake and drawn without fog. No real-time shadows, no post-processing.
   - Moving objects use one hemisphere light plus one directional light. Both use the `SUN_*`/`SKY_*` constants the bake used, so they match; change those only together with a rebake.
   - AgX tone mapping (a shader step, not a post pass). Players get a soft blob shadow instead of a real one.
   - The first-person arms and rifle are drawn in a second pass after clearing depth, with their own camera.
@@ -228,7 +234,8 @@ Hitboxes are not Rapier colliders.
   - changing the netcode model
   - changing a performance budget
 - Make the smallest change that solves the problem. Fix bugs where they're caused, not where they show up.
-- **Maps:** collision is still the boxes and ramps in `shared/world.ts`, used by server and client alike. `art/map.py` dresses each box by its `kind` with detail that stays on or behind the box faces (so what you see is what blocks you), adds unreachable scenery outside the walls, and bakes the lighting. Change the layout in `world.ts`, then run `npm run art -- map`.
+- **Maps:** collision is still the boxes and ramps in `shared/world.ts`, used by server and client alike. `art/map.py` dresses each box by its `kind` with detail that stays on or behind the box faces (so what you see is what blocks you), adds unreachable scenery outside the walls, and bakes the lighting. Change the layout in `world.ts` (ground surfaces are `GROUND_PATCHES` there too), then run `npm run art -- map`.
+  - The ring of houses around the edge has its inner faces exactly on `PLAY_HALF_SIZE`, and `stepMovement` clamps every player inside that line, so explosions can never throw anyone out of the map. Keep the ring on that line; `world.test.ts` checks it has no gaps.
 - **Models:** built by the scripts in `art/`, never edited by hand in `public/assets/`. The soldier's head must stay centred on the head hitbox (`HEAD_CENTER_Y`); `SOLDIER_SCALE` in `art/player.py` sets that.
 
 ## Game design (v1)
@@ -243,7 +250,7 @@ Hitboxes are not Rapier colliders.
 - **Deaths:** the body goes ragdoll (drawn only in each browser) and is removed after 10 s. Respawn after 3 s at a random spawn point.
 - **Characters:** a low-poly SWAT soldier holding an M4. The legs blend four running directions by the way the player moves; the upper body holds a rifle pose (built with IK in Blender) that pitches with their aim and kicks when they fire. The uniform takes the player's colour. Ragdolls move the same skeleton. A head sphere and body capsule are the hitboxes.
 - **First person:** gloved arms holding the rifle, with recoil, walking bob and sway; sleeves in your own colour.
-- **Arena:** about 40×40 m, with cover, ramps and a raised platform.
+- **Arena:** a war-torn corner of old Kathmandu, 150×150 m (132×132 m playable). Durbar Square in the middle with a five-level pagoda; four streets out to barricaded gates; an army camp with a helipad (north-west), a stupa courtyard (north-east), a bazaar (south-east) and a ruined quarter around a stone shikhara (south-west). The Himalaya on the northern horizon.
 - **Match:** first to 15 kills wins. The scoreboard shows for 10 s, then the match restarts. Up to 8 players.
 - These numbers live in `shared/constants.ts` once it exists. Change them there, not here.
 

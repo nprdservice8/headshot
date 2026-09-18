@@ -17,14 +17,15 @@ import {
   PLAYER_HEIGHT,
   PLAYER_RADIUS,
   SNAP_TO_GROUND,
+  SPRINT_SPEED,
   STEP_HEIGHT,
   STEP_MIN_WIDTH,
   TICK_SEC,
   WALK_SPEED,
-  SPRINT_SPEED,
 } from "./constants.ts";
+import { clamp } from "./math.ts";
 import { BUTTON } from "./protocol.ts";
-import { collisionGroups } from "./world.ts";
+import { collisionGroups, PLAY_HALF_SIZE } from "./world.ts";
 
 /** Position is the point between the feet. */
 export type MoveState = {
@@ -51,6 +52,7 @@ export type Mover = {
 
 const PLAYER_QUERY = collisionGroups(GROUP_PLAYER, GROUP_WORLD);
 const CAPSULE_HALF_HEIGHT = PLAYER_HEIGHT / 2 - PLAYER_RADIUS;
+const PLAYER_LIMIT = PLAY_HALF_SIZE - PLAYER_RADIUS;
 
 export function createMover(world: World): Mover {
   const collider = world.createCollider(
@@ -213,6 +215,16 @@ export function stepMovement(
     state.vy = 0;
   }
   state.grounded = grounded;
+  // Explosions can throw a player higher than the houses around the edge, so the edge itself
+  // stops them too.
+  if (Math.abs(state.x) > PLAYER_LIMIT) {
+    state.x = clamp(state.x, -PLAYER_LIMIT, PLAYER_LIMIT);
+    state.vx = 0;
+  }
+  if (Math.abs(state.z) > PLAYER_LIMIT) {
+    state.z = clamp(state.z, -PLAYER_LIMIT, PLAYER_LIMIT);
+    state.vz = 0;
+  }
 }
 
 function moveProbeTo(mover: Mover, state: MoveState): void {

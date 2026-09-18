@@ -28,21 +28,22 @@ import {
   SKY_HORIZON_COLOR,
   SKY_INTENSITY,
   SKY_ZENITH_COLOR,
+  SPRINT_FOV_KICK_DEG,
   SUN_AZIMUTH_DEG,
   SUN_COLOR,
   SUN_ELEVATION_DEG,
   SUN_INTENSITY,
   WALK_SPEED,
-  SPRINT_FOV_KICK_DEG,
 } from "../shared/constants.ts";
 import { clamp } from "../shared/math.ts";
 import type { Assets } from "./assets.ts";
 import { teamColor } from "./characters.ts";
 
-const FOG_NEAR = 50;
-const FOG_FAR = 190;
+const FOG_NEAR = 60;
+const FOG_FAR = 260;
 const NEAR_PLANE = 0.05;
-const FAR_PLANE = 400;
+/** Far enough for the Himalaya on the horizon (art/scenery.py). */
+const FAR_PLANE = 2500;
 const SKY_RADIUS = 350;
 const MAX_PIXEL_RATIO = 2;
 const EXPOSURE = 1.15;
@@ -188,10 +189,15 @@ function addMap(assets: Assets): void {
   // Scenery has its lit colour baked into the vertex colours, scaled down by SCENERY_LIGHT_RANGE.
   const scenery = new MeshBasicMaterial({ vertexColors: true });
   scenery.color.setScalar(SCENERY_LIGHT_RANGE);
+  // The hills and mountains far away are baked the same way, with haze already in their colours;
+  // fog would hide them completely.
+  const backdrop = new MeshBasicMaterial({ vertexColors: true, fog: false });
+  backdrop.color.setScalar(SCENERY_LIGHT_RANGE);
+  const byName: Record<string, Material> = { Scenery: scenery, Backdrop: backdrop };
   assets.map.traverse((object) => {
     if (!(object instanceof Mesh)) return;
     const source = object.material as Material;
-    object.material = source.name === "Scenery" ? scenery : arena;
+    object.material = byName[source.name] ?? arena;
   });
   // The map never moves.
   assets.map.updateMatrixWorld(true);

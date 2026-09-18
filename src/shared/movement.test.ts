@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { before, test } from "node:test";
 import type { World } from "@dimforge/rapier3d-compat";
 import RAPIER from "@dimforge/rapier3d-compat";
-import { SPRINT_SPEED, STEP_HEIGHT, TICK_RATE, WALK_SPEED } from "./constants.ts";
+import { PLAYER_RADIUS, SPRINT_SPEED, STEP_HEIGHT, TICK_RATE, WALK_SPEED } from "./constants.ts";
 import {
   copyMoveState,
   createMover,
@@ -12,7 +12,7 @@ import {
   stepMovement,
 } from "./movement.ts";
 import { BUTTON } from "./protocol.ts";
-import { addSolidBox, ramp } from "./world.ts";
+import { addSolidBox, PLAY_HALF_SIZE, ramp } from "./world.ts";
 
 let world: World;
 let mover: Mover;
@@ -96,6 +96,30 @@ test("overlapping corner walls never admit a capsule wedge", () => {
   run(state, 0, 10);
   run(state, BUTTON.FORWARD | BUTTON.LEFT, TICK_RATE * 3, Math.PI / 4);
   assert.ok(state.x > -10.2 || state.z > -10.2, `wedged into corner x=${state.x}, z=${state.z}`);
+});
+
+test("nothing throws a player past the edge of the play area", () => {
+  // The test course's floor runs on past the edge, with nothing standing at it.
+  const limit = PLAY_HALF_SIZE - PLAYER_RADIUS;
+  for (const [vx, vz] of [
+    [80, 20],
+    [20, 80],
+    [60, 60],
+  ] as const) {
+    const state = createMoveState(50, 0, 50);
+    state.vx = vx;
+    state.vy = 30;
+    state.vz = vz;
+    run(state, BUTTON.FORWARD, TICK_RATE * 4, Math.atan2(-vx, -vz));
+    assert.ok(
+      Math.abs(state.x) <= limit && Math.abs(state.z) <= limit,
+      `at ${state.x}, ${state.z}`,
+    );
+    assert.ok(
+      state.x === limit || state.x === -limit || Math.abs(state.z) === limit,
+      "reached the edge",
+    );
+  }
 });
 
 test("jumping leaves the ground and lands again", () => {
