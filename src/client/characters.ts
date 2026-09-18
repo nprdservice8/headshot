@@ -62,6 +62,9 @@ export type PlayerView = CharacterModel & {
   runs: AnimationAction[];
   torso: Object3D;
   chest: Object3D;
+  /** The aim clip's rotations for torso and chest, which `pose` builds on each frame. */
+  torsoAim: Quaternion;
+  chestAim: Quaternion;
   torsoAxis: Vector3;
   chestAxis: Vector3;
   muzzle: Object3D;
@@ -70,7 +73,6 @@ export type PlayerView = CharacterModel & {
   forwardSpeed: number;
   sideSpeed: number;
   recoil: number;
-  lowerYaw: number;
   lastX: number;
   lastY: number;
   lastZ: number;
@@ -233,6 +235,8 @@ function createPlayerView(id: number): PlayerView {
     runs: [],
     torso: findObject(character.model, "Torso"),
     chest: findObject(character.model, "Chest"),
+    torsoAim: new Quaternion(),
+    chestAim: new Quaternion(),
     torsoAxis: new Vector3(),
     chestAxis: new Vector3(),
     muzzle: findObject(character.model, "Muzzle"),
@@ -241,7 +245,6 @@ function createPlayerView(id: number): PlayerView {
     forwardSpeed: 0,
     sideSpeed: 0,
     recoil: 0,
-    lowerYaw: 0,
     lastX: 0,
     lastY: 0,
     lastZ: 0,
@@ -249,6 +252,8 @@ function createPlayerView(id: number): PlayerView {
   view.runs = [view.runForward, view.runBack, view.runLeft, view.runRight];
   if (view.shadowSlot >= 0) shadowSlotsUsed[view.shadowSlot] = true;
   mixer.update(0);
+  view.torsoAim.copy(view.torso.quaternion);
+  view.chestAim.copy(view.chest.quaternion);
   root.updateMatrixWorld(true);
   view.torsoAxis.copy(pitchAxis(view.torso));
   view.chestAxis.copy(pitchAxis(view.chest));
@@ -275,11 +280,11 @@ export function updatePlayerView(
     view.lastX = x;
     view.lastY = y;
     view.lastZ = z;
-    view.lowerYaw = yaw;
     playerViews.set(id, view);
   }
   view.root.visible = visible;
   view.root.position.set(x, y, z);
+  view.root.rotation.y = yaw;
 
   const dx = x - view.lastX;
   const dy = y - view.lastY;
@@ -291,15 +296,6 @@ export function updatePlayerView(
   const teleported = step > MAX_FRAME_STEP;
   const airborne = dt > 0 && Math.abs(dy / dt) > AIRBORNE_SPEED;
   if (dt > 0 && !teleported) {
-    // Legs turn toward travel, not wherever the player is aiming. This keeps strafing and quick
-    // turns from corkscrewing the entire character around its waist.
-    if (step > 0.002) {
-      const target = Math.atan2(-dx, -dz);
-      let turn = target - view.lowerYaw;
-      if (turn > Math.PI) turn -= Math.PI * 2;
-      if (turn < -Math.PI) turn += Math.PI * 2;
-      view.lowerYaw += turn * (1 - Math.exp(-14 * dt));
-    }
     const sin = Math.sin(yaw);
     const cos = Math.cos(yaw);
     // Yaw 0 faces -Z, so forward is (-sin, -cos) and right is (cos, -sin).
@@ -310,10 +306,8 @@ export function updatePlayerView(
     view.sideSpeed += (side - view.sideSpeed) * blend;
     if (!airborne) view.runPhase = (view.runPhase + step / RUN_CYCLE_METRES) % 1;
   }
-  if (teleported) view.lowerYaw = yaw;
-  view.root.rotation.y = view.lowerYaw;
   animate(view, dt);
-  pose(view, yaw, pitch, dt);
+  pose(view, pitch, dt);
   placeShadow(view, x, y, z, visible);
 }
 
@@ -332,14 +326,12 @@ function animate(view: PlayerView, dt: number): void {
 }
 
 /** Aim pitch and recoil, applied on top of the animation's upper-body pose. */
-function pose(view: PlayerView, aimYaw: number, pitch: number, dt: number): void {
+function pose(view: PlayerView, pitch: number, dt: number): void {
   view.recoil *= Math.exp(-RECOIL_RECOVERY_PER_SEC * dt);
-  let torsoYaw = aimYaw - view.lowerYaw;
-  if (torsoYaw > Math.PI) torsoYaw -= Math.PI * 2;
-  if (torsoYaw < -Math.PI) torsoYaw += Math.PI * 2;
-  // Split the yaw between torso and chest so the upper body twists naturally while legs stay put.
-  view.torso.rotateY(torsoYaw * 0.55);
-  view.chest.rotateY(torsoYaw * 0.45);
+  // The mixer only writes a bone when its clip value changes, and the aim pose never does, so
+  // without this reset each frame's rotation would stack on the last and spin the upper body.
+  view.torso.quaternion.copy(view.torsoAim);
+  view.chest.quaternion.copy(view.chestAim);
   tmpQuaternion.setFromAxisAngle(view.torsoAxis, pitch * TORSO_PITCH_SHARE);
   view.torso.quaternion.multiply(tmpQuaternion);
   tmpQuaternion.setFromAxisAngle(
