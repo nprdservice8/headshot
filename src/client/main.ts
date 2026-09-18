@@ -256,7 +256,7 @@ function showOwnShot(nowMs: number): void {
   const hitY = eyeY + aim.y * distance;
   const hitZ = eyeZ + aim.z * distance;
   render.kickViewmodel();
-  effects.showViewmodelFlash(nowMs);
+  effects.showViewmodelFlash(nowMs, render.getViewmodelMuzzle());
   render.muzzleWorldPosition(muzzle);
   effects.showTracer(muzzle.x, muzzle.y, muzzle.z, hitX, hitY, hitZ, nowMs);
   if (distance < RIFLE_RANGE) effects.showImpact(hitX, hitY, hitZ, nowMs);
@@ -315,6 +315,7 @@ function drawFrame(nowMs: number, alpha: number): void {
     camera.lookAt(focus.x, focus.y, focus.z);
   }
   render.setViewmodelVisible(net.self.alive);
+  render.setViewmodelWeapon(net.self.weapon);
   syncRagdollMeshes();
   effects.updateEffects(nowMs);
 

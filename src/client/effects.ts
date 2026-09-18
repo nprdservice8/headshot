@@ -173,8 +173,10 @@ export function showMuzzleFlash(x: number, y: number, z: number, nowMs: number):
   flash.startMs = nowMs;
 }
 
-export function showViewmodelFlash(nowMs: number): void {
+/** `muzzle` is the currently equipped weapon's muzzle point, since it changes as weapons switch. */
+export function showViewmodelFlash(nowMs: number, muzzle: Object3D): void {
   if (!viewmodelFlash) return;
+  muzzle.add(viewmodelFlash);
   viewmodelFlash.material.rotation = Math.random() * Math.PI;
   viewmodelFlash.visible = true;
   viewmodelFlashHideMs = nowMs + MUZZLE_FLASH_MS;

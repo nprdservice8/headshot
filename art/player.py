@@ -43,6 +43,15 @@ RIFLE_HANDGUARD = Vector((0, -0.22, 0.075))
 RIFLE_MUZZLE = Vector((0, -0.585, 0.1035))
 RIFLE_BUTT = Vector((0, 0.2535, 0.057))
 
+# The SMG and bazooka are built procedurally (no CC0 source model for either), in the same
+# grip-at-origin, barrel-along-Y convention as the rifle. Muzzle only: they ride the rifle's
+# grip pose rather than getting their own hand IK, which is close enough for a held prop.
+GUNMETAL = (0.05, 0.05, 0.055, 1)
+OLIVE_DRAB = (0.14, 0.17, 0.1, 1)
+MATTE_BLACK = (0.02, 0.02, 0.02, 1)
+SMG_MUZZLE = Vector((0, -0.34, 0.05))
+BAZOOKA_MUZZLE = Vector((0, -0.75, 0))
+
 # Where the right wrist sits relative to a grip, measured from the pack's pistol pose.
 WRIST_IN_GRIP = Matrix(
     (
@@ -177,6 +186,83 @@ def build_rifle():
     return rifle
 
 
+def _colored_object(name, verts, faces, color):
+    """A standalone mesh object from raw geometry, built without bpy.ops so it works the same in
+    background mode. Normals are recalculated rather than trusted, since face winding above is
+    whatever was convenient to write, not guaranteed outward."""
+    mesh = bpy.data.meshes.new(name)
+    mesh.from_pydata(verts, [], faces)
+    mesh.update()
+    edit = bmesh.new()
+    edit.from_mesh(mesh)
+    bmesh.ops.recalc_face_normals(edit, faces=edit.faces)
+    edit.to_mesh(mesh)
+    edit.free()
+    material = bpy.data.materials.new(name)
+    material.use_nodes = True
+    material.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = color
+    mesh.materials.append(material)
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    return obj
+
+
+def _box(name, center, half, color):
+    cx, cy, cz = center
+    hx, hy, hz = half
+    verts = [
+        (cx - hx, cy - hy, cz - hz), (cx + hx, cy - hy, cz - hz),
+        (cx + hx, cy + hy, cz - hz), (cx - hx, cy + hy, cz - hz),
+        (cx - hx, cy - hy, cz + hz), (cx + hx, cy - hy, cz + hz),
+        (cx + hx, cy + hy, cz + hz), (cx - hx, cy + hy, cz + hz),
+    ]
+    faces = [(0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (1, 5, 6, 2), (2, 6, 7, 3), (3, 7, 4, 0)]
+    return _colored_object(name, verts, faces, color)
+
+
+def _tube(name, base_y, tip_y, radius, color, radius_tip=None, sides=10):
+    """A cylinder (a frustum, when `radius_tip` differs) running along Y from `base_y` to `tip_y`."""
+    radius_tip = radius if radius_tip is None else radius_tip
+    ring = [(math.cos(2 * math.pi * k / sides), math.sin(2 * math.pi * k / sides)) for k in range(sides)]
+    verts = [(c * radius, base_y, s * radius) for c, s in ring]
+    verts += [(c * radius_tip, tip_y, s * radius_tip) for c, s in ring]
+    faces = [(k, (k + 1) % sides, sides + (k + 1) % sides, sides + k) for k in range(sides)]
+    faces.append(tuple(range(sides)))
+    faces.append(tuple(range(2 * sides - 1, sides - 1, -1)))
+    return _colored_object(name, verts, faces, color)
+
+
+def build_smg():
+    """No CC0 source for an SMG, so it's a handful of boxes: a short, blocky compact gun."""
+    parts = [
+        _box("SmgReceiver", (0, -0.04, 0.05), (0.0275, 0.15, 0.0375), GUNMETAL),
+        _tube("SmgBarrel", -0.19, -0.34, 0.016, GUNMETAL),
+        _box("SmgStock", (0, 0.155, 0.05), (0.015, 0.045, 0.015), GUNMETAL),
+        _box("SmgMag", (0, -0.05, -0.09), (0.015, 0.045, 0.07), MATTE_BLACK),
+        _box("SmgGrip", (0, 0.02, -0.07), (0.014, 0.025, 0.06), MATTE_BLACK),
+    ]
+    smg = join(parts)
+    smg.name = "Smg"
+    flatten_materials(smg)
+    return smg
+
+
+def build_bazooka():
+    """A real bazooka silhouette: a long tube with a flared rear vent, sights, and two grips."""
+    parts = [
+        _tube("BazookaTube", -0.7, 0.3, 0.055, OLIVE_DRAB),
+        _tube("BazookaFlare", 0.3, 0.45, 0.055, GUNMETAL, radius_tip=0.085),
+        _box("BazookaFrontSight", (0, -0.45, 0.09), (0.01, 0.025, 0.025), MATTE_BLACK),
+        _box("BazookaRearSight", (0, -0.05, 0.075), (0.009, 0.015, 0.02), MATTE_BLACK),
+        _box("BazookaFrontGrip", (0, -0.15, -0.1), (0.015, 0.025, 0.045), MATTE_BLACK),
+        _box("BazookaGrip", (0, 0.02, -0.09), (0.015, 0.025, 0.065), MATTE_BLACK),
+    ]
+    bazooka = join(parts)
+    bazooka.name = "Bazooka"
+    flatten_materials(bazooka)
+    return bazooka
+
+
 def freeze_pose(armature, action_name, frame):
     """Copies an animation frame into the pose so it can be edited without the action."""
     action = bpy.data.actions[action_name]
@@ -283,21 +369,35 @@ def build_viewmodel(armature, soldier, rifle):
         bones["UpperArm.L"].head + Vector((0.35, -0.1, -0.4)),
     )
     arms = extract_arms(soldier)
-    view_rifle = rifle.copy()
-    view_rifle.data = rifle.data.copy()
-    view_rifle.parent = None
-    bpy.context.scene.collection.objects.link(view_rifle)
-    view_rifle.name = "ViewRifle"
-    view_rifle.matrix_world = rifle_frame
-    muzzle = empty("Muzzle", rifle_frame @ Matrix.Translation(RIFLE_MUZZLE))
+
+    # The SMG and bazooka ride the same grip pose as the rifle (see build_smg/build_bazooka):
+    # one held-prop pose for all three weapons, swapped by visibility client-side.
+    weapons = [
+        ("ViewRifle", rifle, "MuzzleRifle", RIFLE_MUZZLE),
+        ("ViewSmg", build_smg(), "MuzzleSmg", SMG_MUZZLE),
+        ("ViewBazooka", build_bazooka(), "MuzzleBazooka", BAZOOKA_MUZZLE),
+    ]
+    view_weapons = []
+    muzzles = []
+    for name, source, muzzle_name, muzzle_point in weapons:
+        view_weapon = source.copy()
+        view_weapon.data = source.data.copy()
+        view_weapon.parent = None
+        bpy.context.scene.collection.objects.link(view_weapon)
+        view_weapon.name = name
+        view_weapon.matrix_world = rifle_frame
+        view_weapons.append(view_weapon)
+        muzzles.append(empty(muzzle_name, rifle_frame @ Matrix.Translation(muzzle_point)))
+
     # Camera space: the eye at the origin, forward along +Y and up along +Z, which the glTF
     # exporter turns into three.js camera space (forward -Z, up +Y).
     to_camera = Matrix.Rotation(math.pi, 4, "Z") @ Matrix.Translation(-eye)
-    for obj in (arms, view_rifle, muzzle):
+    for obj in (arms, *view_weapons, *muzzles):
         obj.matrix_world = to_camera @ obj.matrix_world
     apply_transform(arms)
-    apply_transform(view_rifle)
-    return arms, view_rifle, muzzle
+    for view_weapon in view_weapons:
+        apply_transform(view_weapon)
+    return arms, view_weapons, muzzles
 
 
 def build_grenade():
@@ -405,15 +505,15 @@ def main():
         render_preview("aim_back", camera_looking(Vector((0.9, 1.8, 1.9)), target), lens=35)
 
     # The viewmodel comes first: exporting animations leaves the armature in some other pose.
-    arms, view_rifle, muzzle = build_viewmodel(armature, soldier, rifle)
+    arms, view_weapons, muzzles = build_viewmodel(armature, soldier, rifle)
     if PREVIEW:
-        for obj in (soldier, rifle):
+        for obj in (soldier, rifle, *view_weapons[1:]):
             obj.hide_render = True
         eye_camera = Matrix.Rotation(math.radians(90), 4, "X")
         render_preview("viewmodel", eye_camera, lens=VIEW_FOV_DEG)
         return
-    export_glb("viewmodel.glb", [arms, view_rifle, muzzle])
-    for obj in (arms, view_rifle, muzzle):
+    export_glb("viewmodel.glb", [arms, *view_weapons, *muzzles])
+    for obj in (arms, *view_weapons, *muzzles):
         bpy.data.objects.remove(obj)
     export_character(armature, soldier, rifle, rifle_frame)
     export_glb("grenade.glb", [build_grenade()])

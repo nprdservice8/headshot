@@ -73,7 +73,13 @@ const viewmodelCamera = new PerspectiveCamera(VIEWMODEL_FOV_DEG, 1, VIEWMODEL_NE
 viewmodelScene.add(viewmodelCamera);
 const viewmodel = new Group();
 viewmodelCamera.add(viewmodel);
-let viewmodelMuzzle: Object3D = viewmodel;
+// One mesh and one muzzle point per weapon id (see WEAPON in shared/weapons.ts), all loaded up
+// front and swapped by visibility so switching weapons never touches the network or reloads assets.
+const VIEW_WEAPON_NAMES = ["ViewRifle", "ViewSmg", "ViewBazooka"];
+const VIEW_MUZZLE_NAMES = ["MuzzleRifle", "MuzzleSmg", "MuzzleBazooka"];
+const viewWeapons: Object3D[] = [];
+const viewMuzzles: Object3D[] = [];
+let currentWeapon = 0;
 let viewmodelTeamMaterial: MeshLambertMaterial | null = null;
 let viewmodelKick = 0;
 let bobPhase = 0;
@@ -114,7 +120,10 @@ export function initRenderer(canvas: HTMLCanvasElement, assets: Assets): void {
 
   for (const object of assets.viewmodel.children.slice()) viewmodel.add(object);
   viewmodel.traverse((object) => {
-    if (object.name === "Muzzle") viewmodelMuzzle = object;
+    const weaponIndex = VIEW_WEAPON_NAMES.indexOf(object.name);
+    if (weaponIndex !== -1) viewWeapons[weaponIndex] = object;
+    const muzzleIndex = VIEW_MUZZLE_NAMES.indexOf(object.name);
+    if (muzzleIndex !== -1) viewMuzzles[muzzleIndex] = object;
     if (!(object instanceof Mesh)) return;
     const source = object.material as Material;
     if (source.name === "Team") {
@@ -124,6 +133,10 @@ export function initRenderer(canvas: HTMLCanvasElement, assets: Assets): void {
       object.material = litMaterial;
     }
   });
+  for (let i = 0; i < viewWeapons.length; i++) {
+    const weapon = viewWeapons[i];
+    if (weapon) weapon.visible = i === currentWeapon;
+  }
 
   grenadeTemplate = assets.grenade;
   grenadeTemplate.traverse((object) => {
@@ -131,9 +144,19 @@ export function initRenderer(canvas: HTMLCanvasElement, assets: Assets): void {
   });
 }
 
-/** The first-person muzzle, for effects that attach to it. */
+/** The first-person muzzle of the currently equipped weapon, for effects that attach to it. */
 export function getViewmodelMuzzle(): Object3D {
-  return viewmodelMuzzle;
+  return viewMuzzles[currentWeapon] ?? viewmodel;
+}
+
+/** Shows the equipped weapon's mesh and hides the others. Safe to call every frame. */
+export function setViewmodelWeapon(weapon: number): void {
+  if (weapon === currentWeapon) return;
+  const previous = viewWeapons[currentWeapon];
+  if (previous) previous.visible = false;
+  currentWeapon = weapon;
+  const next = viewWeapons[currentWeapon];
+  if (next) next.visible = true;
 }
 
 function resize(): void {
@@ -234,7 +257,7 @@ function syncViewmodelCamera(): void {
 
 export function muzzleWorldPosition(out: Vector3): Vector3 {
   syncViewmodelCamera();
-  return viewmodelMuzzle.getWorldPosition(out);
+  return getViewmodelMuzzle().getWorldPosition(out);
 }
 
 export function kickViewmodel(): void {
