@@ -130,7 +130,7 @@ function restoreSession(): void {
     const guestName = sessionStorage.getItem(GUEST_STORAGE_KEY)?.trim() ?? "";
     if (!account && guestName.length === 0) return;
     if (new URLSearchParams(location.search).has("play")) {
-      currentAccount = account;
+      currentAccount = account ?? null;
       currentGuestName = account ? null : guestName;
       return;
     }
