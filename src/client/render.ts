@@ -46,7 +46,8 @@ const NEAR_PLANE = 0.05;
 const FAR_PLANE = 2500;
 const SKY_RADIUS = 350;
 const MAX_PIXEL_RATIO = 2;
-const EXPOSURE = 1.15;
+// AgX rolls off highlights hard at neutral exposure, which reads as a dim scene; this lifts it.
+const EXPOSURE = 1.7;
 /** Must match VIEW_FOV_DEG in art/player.py, which posed the arms for this field of view. */
 const VIEWMODEL_FOV_DEG = 60;
 const VIEWMODEL_NEAR = 0.01;
