@@ -464,8 +464,8 @@
     #weapon-slots { display: flex; justify-content: flex-end; gap: 5px; margin-top: 9px; }
     .weapon-slot { padding: 3px 7px; border: 1px solid rgba(255,255,255,.16); border-radius: 5px; color: var(--muted); font: 700 11px "Chakra Petch", sans-serif; }
     .weapon-slot.selected { color: var(--text); border-color: var(--cyan); background: rgba(0,240,255,.14); box-shadow: 0 0 10px var(--cyan-glow); }
-    #minimap { position: absolute; right: 28px; top: 24px; width: 108px; height: 108px; border: 1px solid var(--panel-border); border-radius: 50%; background: radial-gradient(circle, rgba(0,240,255,.16) 0 2px, transparent 3px), linear-gradient(45deg, transparent 48%, rgba(255,255,255,.08) 49% 51%, transparent 52%), var(--panel); box-shadow: inset 0 0 24px var(--panel-glow); }
-    #minimap::after { content: "TACTICAL MAP"; position: absolute; width: 100%; top: 43px; text-align: center; color: var(--muted); font: 700 9px "Chakra Petch", sans-serif; letter-spacing: .08em; }
+    #minimap { position: absolute; right: 28px; top: 24px; width: 108px; height: 108px; overflow: hidden; border: 1px solid var(--panel-border); border-radius: 50%; background: radial-gradient(circle, rgba(0,240,255,.16) 0 2px, transparent 3px), var(--panel); box-shadow: inset 0 0 24px var(--panel-glow); }
+    #minimap-canvas { display: block; width: 108px; height: 108px; }
 
     .stats-row {
       display: flex;
@@ -847,7 +847,7 @@
       <span id="weapon-name">RIFLE</span><span id="weapon-ammo">∞ AMMO</span>
       <div id="weapon-slots"><span class="weapon-slot selected" data-weapon="0">1 RFL</span><span class="weapon-slot" data-weapon="1">2 SMG</span><span class="weapon-slot" data-weapon="2">3 RPG</span></div>
     </div>
-    <div id="minimap" aria-label="Tactical minimap"></div>
+    <div id="minimap" role="img" aria-label="Tactical minimap"><canvas id="minimap-canvas" width="108" height="108"></canvas></div>
 
     <ul id="kill-feed"></ul>
     <div id="center-message"></div>

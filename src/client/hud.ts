@@ -1,5 +1,6 @@
 import { KILL_FEED_MAX, KILL_FEED_MS } from "../shared/constants.ts";
 import type { RosterEntry } from "../shared/protocol.ts";
+import { PLAY_HALF_SIZE } from "../shared/world.ts";
 
 export function getElement<T extends HTMLElement>(id: string, type: { new (): T }): T {
   const element = document.getElementById(id);
@@ -29,12 +30,17 @@ const scoreboard = getElement("scoreboard", HTMLDivElement);
 const scoreboardRows = getElement("scoreboard-rows", HTMLTableSectionElement);
 const matchKills = getElement("match-kills", HTMLSpanElement);
 const onlinePlayers = getElement("online-players", HTMLSpanElement);
+const minimapCanvas = getElement("minimap-canvas", HTMLCanvasElement);
+const minimapContext = minimapCanvas.getContext("2d");
 const weaponName = getElement("weapon-name", HTMLSpanElement);
 const weaponAmmo = getElement("weapon-ammo", HTMLSpanElement);
 const weaponSlots = getElement("weapon-slots", HTMLDivElement);
 const crosshair = getElement("crosshair", HTMLDivElement);
 
 const FLASH_MS = 220;
+const MINIMAP_SIZE = 108;
+const MINIMAP_CENTER = MINIMAP_SIZE / 2;
+const MINIMAP_SCALE = MINIMAP_SIZE / (PLAY_HALF_SIZE * 2);
 
 // Last values written, so the DOM is only touched when something changes.
 let shownHp = -1;
@@ -191,6 +197,55 @@ export function setMatchStats(players: readonly RosterEntry[], myId: number): vo
     shownOnlinePlayers = players.length;
     onlinePlayers.textContent = String(players.length);
   }
+}
+
+export function beginMinimap(x: number, z: number, yaw: number, alive: boolean): void {
+  const context = getMinimapContext();
+  context.clearRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE);
+  context.strokeStyle = "rgba(255, 255, 255, 0.16)";
+  context.lineWidth = 1;
+  context.strokeRect(1, 1, MINIMAP_SIZE - 2, MINIMAP_SIZE - 2);
+  context.beginPath();
+  context.moveTo(MINIMAP_CENTER, 2);
+  context.lineTo(MINIMAP_CENTER, MINIMAP_SIZE - 2);
+  context.moveTo(2, MINIMAP_CENTER);
+  context.lineTo(MINIMAP_SIZE - 2, MINIMAP_CENTER);
+  context.stroke();
+  if (!alive) return;
+  drawMinimapPlayer(x, z, "#00f0ff", yaw, true);
+}
+
+export function addMinimapPlayer(x: number, z: number, alive: boolean): void {
+  if (alive) drawMinimapPlayer(x, z, "#ffcf4a", 0, false);
+}
+
+function drawMinimapPlayer(x: number, z: number, color: string, yaw: number, local: boolean): void {
+  const mapX = Math.max(3, Math.min(MINIMAP_SIZE - 3, MINIMAP_CENTER + x * MINIMAP_SCALE));
+  const mapY = Math.max(3, Math.min(MINIMAP_SIZE - 3, MINIMAP_CENTER + z * MINIMAP_SCALE));
+  const context = getMinimapContext();
+  context.save();
+  context.translate(mapX, mapY);
+  context.rotate(yaw);
+  context.fillStyle = color;
+  context.shadowColor = color;
+  context.shadowBlur = local ? 8 : 4;
+  if (local) {
+    context.beginPath();
+    context.moveTo(0, -6);
+    context.lineTo(4, 5);
+    context.lineTo(0, 3);
+    context.lineTo(-4, 5);
+    context.closePath();
+    context.fill();
+  } else {
+    context.fillRect(-3, -3, 6, 6);
+  }
+  context.restore();
+}
+
+function getMinimapContext(): CanvasRenderingContext2D {
+  if (!minimapContext) throw new Error("Canvas 2D context is unavailable");
+  return minimapContext;
 }
 
 export function setScoreboardVisible(visible: boolean): void {

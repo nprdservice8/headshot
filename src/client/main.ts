@@ -285,21 +285,23 @@ function drawOtherPlayer(
   pitch: number,
   alive: boolean,
 ): void {
+  hud.addMinimapPlayer(x, z, alive);
   characters.updatePlayerView(id, x, y, z, yaw, pitch, alive, frameDt);
 }
 
 function drawFrame(nowMs: number, alpha: number): void {
   const tick = net.renderTick(nowMs);
+  net.fadeCorrection(frameDt);
+  const x = lerp(net.previous.x, net.predicted.x, alpha) + net.correction.x;
+  const y = lerp(net.previous.y, net.predicted.y, alpha) + net.correction.y;
+  const z = lerp(net.previous.z, net.predicted.z, alpha) + net.correction.z;
+  hud.beginMinimap(x, z, look.yaw, net.self.alive);
   net.processWorldEvents(tick, handleWorldEvent);
   net.forEachOtherPlayer(tick, drawOtherPlayer);
   net.forEachGrenade(tick, render.updateGrenadeView);
   net.forEachRocket(tick, render.updateRocketView);
   render.removeUnseenGrenades();
 
-  net.fadeCorrection(frameDt);
-  const x = lerp(net.previous.x, net.predicted.x, alpha) + net.correction.x;
-  const y = lerp(net.previous.y, net.predicted.y, alpha) + net.correction.y;
-  const z = lerp(net.previous.z, net.predicted.z, alpha) + net.correction.z;
   // Your own body is never drawn, but its pose is kept up to date for your ragdoll.
   characters.updatePlayerView(net.self.id, x, y, z, look.yaw, look.pitch, false, frameDt);
   render.updateViewmodel(
