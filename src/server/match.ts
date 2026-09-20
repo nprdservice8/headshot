@@ -45,16 +45,10 @@ import {
   MAX_PLAYERS,
   MAX_REWIND_TICKS,
   RESPAWN_DELAY_TICKS,
-  ROCKET_EXPLOSION_KNOCKBACK,
-  ROCKET_EXPLOSION_MAX_DAMAGE,
-  ROCKET_EXPLOSION_RADIUS,
-  ROCKET_LIFETIME_TICKS,
-  ROCKET_RADIUS,
-  ROCKET_SPEED,
-  ROCKETS_PER_LIFE,
   SNAPSHOT_INTERVAL_TICKS,
   SPAWN_SAFE_DISTANCE,
   SPRINT_STAMINA_MAX,
+  TICK_SEC,
 } from "../shared/constants.ts";
 import { clamp, round2, round3 } from "../shared/math.ts";
 import {
@@ -69,13 +63,20 @@ import {
   type DeathCause,
   type GrenadeSnapshot,
   type InputMessage,
+  type LobbyStatus,
   MOVEMENT_BUTTONS,
   type PlayerSnapshot,
   type RocketSnapshot,
   type RosterEntry,
   type ServerMessage,
 } from "../shared/protocol.ts";
-import { WEAPON, WEAPON_DEFINITIONS, type WeaponId, weaponDefinition } from "../shared/weapons.ts";
+import {
+  damageAtRange,
+  WEAPON,
+  WEAPON_DEFINITIONS,
+  type WeaponId,
+  weaponDefinition,
+} from "../shared/weapons.ts";
 import {
   castWorldRay,
   collisionGroups,
@@ -99,10 +100,11 @@ export type Player = {
   alive: boolean;
   hp: number;
   grenades: number;
-  rockets: number;
   weapon: WeaponId;
-  /** Rounds left in each weapon's magazine, indexed by WeaponId. The bazooka slot is unused. */
+  /** Rounds loaded in each weapon, indexed by WeaponId. */
   ammo: [number, number, number];
+  /** Spare rounds for each weapon this life, indexed by WeaponId. */
+  reserve: [number, number, number];
   reloading: boolean;
   reloadWeapon: WeaponId;
   reloadEndTick: number;
@@ -126,10 +128,12 @@ export type Player = {
 };
 
 export type Grenade = { id: number; ownerId: number; body: RigidBody; explodeTick: number };
-/** Bazooka rockets are straight, server-simulated projectiles with swept collision each tick. */
+/** Rockets are straight, server-simulated projectiles with swept collision each tick. */
 export type Rocket = {
   id: number;
   ownerId: number;
+  /** The weapon that fired it, for its speed, damage and blast. */
+  weapon: WeaponId;
   x: number;
   y: number;
   z: number;
@@ -193,9 +197,9 @@ export function addPlayer(match: Match, name: string): Player | null {
     alive: false,
     hp: 0,
     grenades: 0,
-    rockets: 0,
     weapon: WEAPON.RIFLE,
     ammo: [0, 0, 0],
+    reserve: [0, 0, 0],
     reloading: false,
     reloadWeapon: WEAPON.RIFLE,
     reloadEndTick: 0,
@@ -286,7 +290,14 @@ function updatePlayer(match: Match, player: Player): void {
   if (!player.alive) {
     if (match.state === "playing" && match.tick >= player.respawnTick) respawn(match, player);
   } else {
-    stepMovement(match.mover, player.move, buttons, player.yaw, wantsSprint);
+    stepMovement(
+      match.mover,
+      player.move,
+      buttons,
+      player.yaw,
+      wantsSprint,
+      weaponDefinition(player.weapon).movementMultiplier,
+    );
     // Stamina can deny a sprint request, so the reported flag follows what actually happened.
     player.sprinting = player.move.sprinting;
     if (player.regenerating && match.tick >= player.regenTick) {
@@ -296,18 +307,17 @@ function updatePlayer(match: Match, player: Player): void {
     }
     if (match.state === "playing") {
       updateReload(match, player, buttons);
-      if (buttons & BUTTON.FIRE && match.tick >= player.nextFireTick) {
-        const weapon = weaponDefinition(player.weapon);
-        if (weapon.id === WEAPON.BAZOOKA) {
-          if (player.rockets > 0 && match.rockets.length < MAX_LIVE_ROCKETS) {
-            player.nextFireTick = match.tick + weapon.fireIntervalTicks;
-            fireBazooka(match, player);
-          }
-        } else if (!player.reloading && player.ammo[weapon.id] > 0) {
-          player.nextFireTick = match.tick + weapon.fireIntervalTicks;
-          player.ammo[weapon.id]--;
-          fireHitscan(match, player);
-        }
+      const weapon = weaponDefinition(player.weapon);
+      const canFire =
+        !player.reloading &&
+        player.ammo[weapon.id] > 0 &&
+        match.tick >= player.nextFireTick &&
+        (!weapon.projectile || match.rockets.length < MAX_LIVE_ROCKETS);
+      if (buttons & BUTTON.FIRE && canFire) {
+        player.nextFireTick = match.tick + weapon.fireIntervalTicks;
+        player.ammo[weapon.id]--;
+        if (weapon.projectile) fireProjectile(match, player);
+        else fireHitscan(match, player);
       }
       const grenadePressed = buttons & BUTTON.GRENADE && !(player.previousButtons & BUTTON.GRENADE);
       if (grenadePressed && player.grenades > 0 && match.grenades.length < MAX_LIVE_GRENADES) {
@@ -318,28 +328,30 @@ function updatePlayer(match: Match, player: Player): void {
   player.previousButtons = buttons;
 }
 
-/** The bazooka reloads via its own fire cooldown; only the hitscan weapons use a magazine. */
+/** Reloading fills the magazine from the weapon's reserve after its reload time. Pressing
+ * reload or firing on empty starts it; switching weapons mid-reload cancels it. */
 function updateReload(match: Match, player: Player, buttons: number): void {
-  if (player.weapon === WEAPON.BAZOOKA) return;
-  // Switching weapons mid-reload cancels it, same as the ammo it would have refilled.
   if (player.reloading && player.weapon !== player.reloadWeapon) player.reloading = false;
 
+  const weapon = weaponDefinition(player.weapon);
   if (player.reloading) {
     if (match.tick >= player.reloadEndTick) {
-      player.ammo[player.weapon] = weaponDefinition(player.weapon).magSize;
+      const wanted = weapon.magSize - player.ammo[weapon.id];
+      const taken = Math.min(wanted, player.reserve[weapon.id]);
+      player.ammo[weapon.id] += taken;
+      player.reserve[weapon.id] -= taken;
       player.reloading = false;
     }
     return;
   }
-  const magSize = weaponDefinition(player.weapon).magSize;
-  if (player.ammo[player.weapon] >= magSize) return;
+  if (player.ammo[weapon.id] >= weapon.magSize || player.reserve[weapon.id] <= 0) return;
   const reloadPressed =
     (buttons & BUTTON.RELOAD) !== 0 && !(player.previousButtons & BUTTON.RELOAD);
-  const emptyAndFiring = (buttons & BUTTON.FIRE) !== 0 && player.ammo[player.weapon] === 0;
+  const emptyAndFiring = (buttons & BUTTON.FIRE) !== 0 && player.ammo[weapon.id] === 0;
   if (reloadPressed || emptyAndFiring) {
     player.reloading = true;
-    player.reloadWeapon = player.weapon;
-    player.reloadEndTick = match.tick + weaponDefinition(player.weapon).reloadTicks;
+    player.reloadWeapon = weapon.id;
+    player.reloadEndTick = match.tick + weapon.reloadTicks;
   }
 }
 
@@ -412,6 +424,7 @@ function fireHitscan(match: Match, shooter: Player): void {
     type: "shot",
     tick: match.tick,
     shooterId: shooter.id,
+    weapon: weapon.id,
     fromX: round2(eyeX),
     fromY: round2(eyeY),
     fromZ: round2(eyeZ),
@@ -421,12 +434,14 @@ function fireHitscan(match: Match, shooter: Player): void {
   });
 
   if (target && nearest <= wallDistance) {
-    damagePlayer(match, target, head ? MAX_HP : weapon.damage, shooter, head, "rifle", direction);
+    const damage = head ? MAX_HP : damageAtRange(weapon, nearest);
+    damagePlayer(match, target, damage, shooter, head, "rifle", direction);
   }
 }
 
-function fireBazooka(match: Match, shooter: Player): void {
-  shooter.rockets--;
+function fireProjectile(match: Match, shooter: Player): void {
+  const weapon = weaponDefinition(shooter.weapon);
+  if (!weapon.projectile) return;
   viewDirection(shooter.yaw, shooter.pitch, direction);
   const eyeX = shooter.move.x;
   const eyeY = shooter.move.y + EYE_HEIGHT;
@@ -441,17 +456,18 @@ function fireBazooka(match: Match, shooter: Player): void {
     direction.z,
     0.65,
   );
-  const distance = Math.max(0.05, clearance - ROCKET_RADIUS);
+  const distance = Math.max(0.05, clearance - weapon.projectile.bodyRadius);
   match.rockets.push({
     id: match.nextGrenadeId++,
     ownerId: shooter.id,
+    weapon: weapon.id,
     x: eyeX + direction.x * distance,
     y: eyeY + direction.y * distance,
     z: eyeZ + direction.z * distance,
     dx: direction.x,
     dy: direction.y,
     dz: direction.z,
-    expireTick: match.tick + ROCKET_LIFETIME_TICKS,
+    expireTick: match.tick + weapon.projectile.lifetimeTicks,
   });
 }
 
@@ -515,12 +531,17 @@ function updateGrenades(match: Match): void {
   }
 }
 
+/** Flies each rocket one tick, exploding where it meets a wall or a player. A player hit
+ * square on takes the direct damage and is then left out of the splash. */
 function updateRockets(match: Match): void {
-  const distance = ROCKET_SPEED / 60;
   for (let i = match.rockets.length - 1; i >= 0; i--) {
     const rocket = match.rockets[i];
     if (!rocket) continue;
+    const projectile = weaponDefinition(rocket.weapon).projectile;
+    if (!projectile) continue;
+    const distance = projectile.speed * TICK_SEC;
     let hit = match.tick >= rocket.expireTick;
+    let struck: Player | null = null;
     if (!hit) {
       const wall = castWorldRay(
         match.world,
@@ -530,9 +551,9 @@ function updateRockets(match: Match): void {
         rocket.dx,
         rocket.dy,
         rocket.dz,
-        distance + ROCKET_RADIUS,
+        distance + projectile.bodyRadius,
       );
-      if (wall < distance + ROCKET_RADIUS) hit = true;
+      if (wall < distance + projectile.bodyRadius) hit = true;
       for (const player of match.players.values()) {
         if (!player.alive) continue;
         const body = rayHitsUprightCapsule(
@@ -546,10 +567,11 @@ function updateRockets(match: Match): void {
           player.move.z,
           player.move.y + BODY_BOTTOM_Y,
           player.move.y + BODY_TOP_Y,
-          BODY_RADIUS + ROCKET_RADIUS,
+          BODY_RADIUS + projectile.bodyRadius,
         );
         if (body <= distance) {
           hit = true;
+          struck = player;
           break;
         }
       }
@@ -557,16 +579,24 @@ function updateRockets(match: Match): void {
     if (hit) {
       const last = match.rockets.pop();
       if (last && last !== rocket) match.rockets[i] = last;
+      const owner = match.players.get(rocket.ownerId);
+      if (struck) {
+        direction.x = rocket.dx;
+        direction.y = rocket.dy;
+        direction.z = rocket.dz;
+        damagePlayer(match, struck, projectile.directDamage, owner, false, "bazooka", direction);
+      }
       explodeAt(
         match,
         rocket.ownerId,
         rocket.x,
         rocket.y,
         rocket.z,
-        ROCKET_EXPLOSION_RADIUS,
-        ROCKET_EXPLOSION_MAX_DAMAGE,
-        ROCKET_EXPLOSION_KNOCKBACK,
+        projectile.radius,
+        projectile.splashDamage,
+        projectile.knockback,
         "bazooka",
+        struck,
       );
     } else {
       rocket.x += rocket.dx * distance;
@@ -602,6 +632,7 @@ function explodeAt(
   maxDamage: number,
   maxKnockback: number,
   cause: "grenade" | "bazooka",
+  except: Player | null = null,
 ): void {
   match.transport.broadcast({
     type: "explosion",
@@ -613,7 +644,7 @@ function explodeAt(
 
   const owner = match.players.get(ownerId);
   for (const player of match.players.values()) {
-    if (!player.alive) continue;
+    if (!player.alive || player === except) continue;
     const dx = player.move.x - x;
     const dy = player.move.y + BODY_CENTER_Y - y;
     const dz = player.move.z - z;
@@ -701,12 +732,16 @@ function respawn(match: Match, player: Player): void {
   player.alive = true;
   player.hp = MAX_HP;
   player.grenades = GRENADES_PER_LIFE;
-  player.rockets = ROCKETS_PER_LIFE;
   player.weapon = WEAPON.RIFLE;
   player.ammo = [
     WEAPON_DEFINITIONS[WEAPON.RIFLE].magSize,
     WEAPON_DEFINITIONS[WEAPON.SMG].magSize,
     WEAPON_DEFINITIONS[WEAPON.BAZOOKA].magSize,
+  ];
+  player.reserve = [
+    WEAPON_DEFINITIONS[WEAPON.RIFLE].reserve,
+    WEAPON_DEFINITIONS[WEAPON.SMG].reserve,
+    WEAPON_DEFINITIONS[WEAPON.BAZOOKA].reserve,
   ];
   player.reloading = false;
   player.ads = false;
@@ -761,13 +796,29 @@ function restartMatch(match: Match): void {
   broadcastRoster(match);
 }
 
-function broadcastRoster(match: Match): void {
+/** Everyone in the match, best first. */
+export function roster(match: Match): RosterEntry[] {
   const players: RosterEntry[] = [];
   for (const p of match.players.values()) {
     players.push({ id: p.id, name: p.name, kills: p.kills, deaths: p.deaths });
   }
   players.sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
-  match.transport.broadcast({ type: "roster", players });
+  return players;
+}
+
+/** What the lobby page shows, so people can see who is playing before they deploy. */
+export function lobbyStatus(match: Match): LobbyStatus {
+  return {
+    state: match.state,
+    winnerId: match.winnerId,
+    players: roster(match),
+    maxPlayers: MAX_PLAYERS,
+    killsToWin: KILLS_TO_WIN,
+  };
+}
+
+function broadcastRoster(match: Match): void {
+  match.transport.broadcast({ type: "roster", players: roster(match) });
 }
 
 // Snapshots allocate while they are JSON. The binary format planned before going public removes that.
@@ -784,6 +835,7 @@ function sendSnapshots(match: Match): void {
       weapon: p.weapon,
       ads: p.ads,
       sprinting: p.sprinting,
+      reloading: p.reloading,
       alive: p.alive,
     });
   }
@@ -799,9 +851,13 @@ function sendSnapshots(match: Match): void {
   }
   const rockets: RocketSnapshot[] = match.rockets.map((rocket) => ({
     id: rocket.id,
+    ownerId: rocket.ownerId,
     x: round2(rocket.x),
     y: round2(rocket.y),
     z: round2(rocket.z),
+    dx: round2(rocket.dx),
+    dy: round2(rocket.dy),
+    dz: round2(rocket.dz),
   }));
   for (const p of match.players.values()) {
     // The receiver's own state is sent at full precision: its client replays inputs from it.
@@ -821,8 +877,9 @@ function sendSnapshots(match: Match): void {
         alive: p.alive,
         hp: p.hp,
         grenades: p.grenades,
-        rockets: p.rockets,
         ammo: p.ammo[p.weapon],
+        // JSON has no Infinity, so a bottomless reserve travels as -1.
+        reserve: Number.isFinite(p.reserve[p.weapon]) ? p.reserve[p.weapon] : -1,
         reloading: p.reloading,
         weapon: p.weapon,
         ads: p.ads,

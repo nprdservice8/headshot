@@ -8,49 +8,211 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700;900&family=Outfit:wght@400;600;700;900&display=swap" rel="stylesheet" />
   <style>
-    :root { color: #f2f5fb; background: #05070c; font-family: Outfit, system-ui, sans-serif; }
+    :root {
+      --bg: #05070c; --panel: rgba(8, 13, 22, .88); --panel-border: rgba(178, 223, 255, .16);
+      --text: #f2f5fb; --muted: #94a3b8; --cyan: #00f0ff; --gold: #ffcf4a; --green: #58ff9c; --red: #ff5f6d;
+      --display: "Chakra Petch", sans-serif;
+      color: var(--text); background: var(--bg); font-family: Outfit, system-ui, sans-serif;
+    }
     * { box-sizing: border-box; }
-    body { min-height: 100vh; margin: 0; display: grid; place-items: center; overflow: hidden; background: radial-gradient(circle at 20% 10%, #172e40 0%, transparent 28%), radial-gradient(circle at 90% 90%, #3b2412 0%, transparent 25%), #05070c; }
-    body::before { content: ""; position: fixed; inset: 0; opacity: .23; pointer-events: none; background-image: linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px); background-size: 42px 42px; mask-image: linear-gradient(to bottom, black, transparent); }
-    main { width: 90vw; height: 90vh; display: grid; grid-template-columns: minmax(380px, .9fr) minmax(460px, 1.1fr); overflow: hidden; border: 1px solid rgba(178,223,255,.18); border-radius: 28px; background: rgba(8,13,22,.9); box-shadow: 0 34px 110px rgba(0,0,0,.72), inset 0 1px 0 rgba(255,255,255,.07), inset 0 0 90px rgba(0,240,255,.05); }
-    .copy { position: relative; padding: clamp(30px, 5vw, 76px); display: flex; flex-direction: column; align-items: flex-start; justify-content: center; border-right: 1px solid rgba(255,255,255,.09); background: linear-gradient(145deg, rgba(18,33,48,.55), rgba(8,13,22,.2)); }
-    .copy::before { content: ""; position: absolute; left: 0; top: 12%; bottom: 12%; width: 3px; background: linear-gradient(transparent, #00f0ff, transparent); box-shadow: 0 0 18px #00f0ff; }
-    .eyebrow { display: flex; align-items: center; gap: 9px; margin: 0 0 15px; color: #00f0ff; font: 700 12px "Chakra Petch", sans-serif; letter-spacing: .2em; }
-    .eyebrow::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #58ff9c; box-shadow: 0 0 12px #58ff9c; }
-    h1 { margin: 0; font: 900 clamp(45px, 5.8vw, 92px)/.85 "Chakra Petch", sans-serif; letter-spacing: .04em; text-shadow: 0 8px 30px rgba(0,0,0,.45); }
-    h1 span, #player-name { color: #ffcf4a; }
-    .divider { width: 78px; height: 2px; margin: 30px 0 25px; background: linear-gradient(90deg, #ffcf4a, transparent); }
-    .welcome { margin: 0 0 8px; font-size: clamp(18px, 1.7vw, 25px); font-weight: 700; }
-    .desc { max-width: 420px; margin: 0 0 34px; color: #94a3b8; line-height: 1.65; font-size: 15px; }
-    .actions { width: min(340px, 100%); display: grid; gap: 10px; }
-    button { width: 100%; border: 0; border-radius: 11px; padding: 16px 20px; cursor: pointer; color: #0b0f19; background: linear-gradient(135deg,#ffe179,#ee9e19); box-shadow: 0 10px 30px rgba(255,207,74,.3); font: 700 17px "Chakra Petch", sans-serif; letter-spacing: .08em; text-transform: uppercase; transition: transform .2s ease, filter .2s ease; }
-    button:hover { transform: translateY(-2px); filter: brightness(1.08); }
-    #logout-btn { color: #94a3b8; border: 1px solid rgba(255,255,255,.16); background: transparent; box-shadow: none; font-size: 12px; padding: 11px 15px; }
-    .settings-link { display: grid; place-items: center; width: 100%; border: 1px solid rgba(0,240,255,.42); border-radius: 11px; padding: 12px 20px; color: #00f0ff; text-decoration: none; font: 700 12px "Chakra Petch", sans-serif; letter-spacing: .1em; text-transform: uppercase; transition: background .2s ease; }
-    .settings-link:hover { background: rgba(0,240,255,.09); }
-    .preview { min-height: 0; position: relative; overflow: hidden; background: radial-gradient(ellipse at 50% 50%, rgba(0,240,255,.19), transparent 47%), linear-gradient(180deg, rgba(5,9,15,.1), rgba(5,9,15,.7)); }
-    .preview::before { content: ""; position: absolute; inset: 9%; border: 1px solid rgba(0,240,255,.13); border-radius: 50%; box-shadow: inset 0 0 55px rgba(0,240,255,.08); pointer-events: none; }
-    .preview::after { content: "OPERATIVE READY  //  LOADOUT SYNCHRONIZED"; position: absolute; bottom: 30px; width: 100%; text-align: center; color: #00f0ff; font: 700 11px "Chakra Petch", sans-serif; letter-spacing: .19em; pointer-events: none; }
-    canvas { width: 100%; height: 100%; display: block; }
-    @media (max-width: 760px) { body { overflow: auto; padding: 5vh 0; } main { width: 92vw; height: auto; min-height: 90vh; grid-template-columns: 1fr; } .copy { order: 2; padding: 42px 28px; border: 0; } .preview { order: 1; height: 48vh; min-height: 360px; } }
+    body { min-height: 100vh; margin: 0; overflow-x: hidden; background: radial-gradient(circle at 15% 0%, #172e40 0%, transparent 30%), radial-gradient(circle at 95% 100%, #3b2412 0%, transparent 28%), var(--bg); }
+    body::before { content: ""; position: fixed; inset: 0; opacity: .2; pointer-events: none; background-image: linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px); background-size: 42px 42px; mask-image: linear-gradient(to bottom, black, transparent); }
+    .lobby { position: relative; width: min(1480px, 96vw); min-height: 100vh; margin: 0 auto; padding: 22px 0 28px; display: grid; grid-template-rows: auto 1fr auto; gap: 18px; }
+
+    /* Top bar */
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 22px; border: 1px solid var(--panel-border); border-radius: 18px; background: var(--panel); }
+    .brand { display: flex; align-items: center; gap: 18px; }
+    .brand h1 { margin: 0; font: 900 30px/1 var(--display); letter-spacing: .06em; }
+    .brand h1 span { color: var(--gold); }
+    .eyebrow { display: flex; align-items: center; gap: 9px; margin: 0; color: var(--cyan); font: 700 11px var(--display); letter-spacing: .2em; }
+    .eyebrow::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 12px var(--green); }
+    .identity { display: flex; align-items: center; gap: 12px; }
+    .chip { display: flex; align-items: center; gap: 10px; padding: 7px 14px 7px 8px; border: 1px solid var(--panel-border); border-radius: 999px; background: rgba(255,255,255,.04); }
+    .avatar { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg, #ffe179, #ee9e19); color: #0b0f19; font: 900 13px var(--display); }
+    .chip strong { font-size: 14px; }
+    .chip small { display: block; color: var(--muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+    .ghost { border: 1px solid rgba(255,255,255,.16); border-radius: 10px; padding: 9px 14px; color: var(--muted); background: transparent; cursor: pointer; text-decoration: none; font: 700 11px var(--display); letter-spacing: .1em; text-transform: uppercase; transition: color .2s, border-color .2s; }
+    .ghost:hover { color: var(--text); border-color: var(--cyan); }
+
+    /* Three columns */
+    .columns { display: grid; grid-template-columns: 300px minmax(420px, 1fr) 320px; gap: 18px; min-height: 0; }
+    .card { position: relative; border: 1px solid var(--panel-border); border-radius: 20px; background: var(--panel); box-shadow: 0 24px 70px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06); }
+    .card h2 { margin: 0; padding: 16px 20px 12px; color: var(--cyan); font: 700 11px var(--display); letter-spacing: .2em; border-bottom: 1px solid rgba(255,255,255,.07); }
+    .card h2 span { float: right; color: var(--muted); letter-spacing: .1em; }
+    .column { display: grid; gap: 18px; align-content: start; }
+
+    /* Player card */
+    .operative { padding: 20px; display: grid; gap: 16px; }
+    .operative-head { display: flex; align-items: center; gap: 14px; }
+    .operative-head .avatar { width: 58px; height: 58px; font-size: 22px; box-shadow: 0 0 24px rgba(255,207,74,.35); }
+    .operative-head strong { display: block; font-size: 20px; font-weight: 700; }
+    .rank { color: var(--gold); font: 700 11px var(--display); letter-spacing: .16em; text-transform: uppercase; }
+    .rank-progress { height: 5px; border-radius: 3px; background: rgba(255,255,255,.08); overflow: hidden; }
+    .rank-progress i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--gold), #ff9d3c); transition: width .6s ease; }
+    .rank-next { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .stat { padding: 10px 8px; border: 1px solid rgba(255,255,255,.07); border-radius: 12px; background: rgba(255,255,255,.03); text-align: center; }
+    .stat-value { display: block; font: 700 22px var(--display); color: var(--text); }
+    .stat-label { color: var(--muted); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+    .recent { padding: 8px 12px 12px; display: grid; gap: 6px; }
+    .recent li { list-style: none; display: grid; grid-template-columns: 52px 1fr auto; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 10px; background: rgba(255,255,255,.03); font-size: 13px; }
+    .recent .badge { text-align: center; padding: 3px 0; border-radius: 6px; font: 700 10px var(--display); letter-spacing: .1em; }
+    .recent .win { background: rgba(88,255,156,.14); color: var(--green); }
+    .recent .loss { background: rgba(255,95,109,.14); color: var(--red); }
+    .recent small { color: var(--muted); }
+    .recent .empty, .players .empty { display: block; padding: 18px; color: var(--muted); font-size: 13px; text-align: center; }
+
+    /* Preview and loadout */
+    .stage { display: grid; grid-template-rows: minmax(300px, 1fr) auto; overflow: hidden; }
+    .preview { position: relative; min-height: 300px; background: radial-gradient(ellipse at 50% 55%, rgba(0,240,255,.18), transparent 48%), linear-gradient(180deg, rgba(5,9,15,.1), rgba(5,9,15,.7)); border-radius: 20px 20px 0 0; overflow: hidden; }
+    .preview::before { content: ""; position: absolute; inset: 8%; border: 1px solid rgba(0,240,255,.13); border-radius: 50%; box-shadow: inset 0 0 55px rgba(0,240,255,.08); pointer-events: none; }
+    .preview canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    .preview .label { position: absolute; left: 22px; top: 18px; }
+    .preview .label b { display: block; font: 900 18px var(--display); letter-spacing: .08em; }
+    .preview .label span { color: var(--muted); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
+    .preview .sync { position: absolute; right: 22px; top: 22px; color: var(--cyan); font: 700 10px var(--display); letter-spacing: .19em; pointer-events: none; }
+    .loadout { border-top: 1px solid rgba(255,255,255,.07); }
+    .weapons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 12px 14px 16px; }
+    .weapon { text-align: left; border: 1px solid rgba(255,255,255,.1); border-radius: 14px; padding: 12px 14px; color: var(--text); background: rgba(255,255,255,.03); cursor: pointer; font: inherit; transition: border-color .2s, background .2s, transform .2s; }
+    .weapon:hover { transform: translateY(-2px); border-color: rgba(0,240,255,.5); }
+    .weapon.selected { border-color: var(--gold); background: rgba(255,207,74,.08); box-shadow: 0 0 0 1px rgba(255,207,74,.35), 0 10px 30px rgba(255,207,74,.1); }
+    .weapon .slot { float: right; color: var(--muted); font: 700 11px var(--display); }
+    .weapon.selected .slot { color: var(--gold); }
+    .weapon-name { display: block; font: 700 16px var(--display); letter-spacing: .06em; }
+    .weapon .role { display: block; margin: 2px 0 10px; color: var(--muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+    .bars { display: grid; gap: 5px; }
+    .bar { display: grid; grid-template-columns: 44px 1fr; align-items: center; gap: 8px; font-size: 10px; color: var(--muted); letter-spacing: .1em; }
+    .bar i { display: block; height: 5px; border-radius: 3px; background: rgba(255,255,255,.08); overflow: hidden; }
+    .bar i::after { content: ""; display: block; height: 100%; width: var(--fill, 0%); background: linear-gradient(90deg, var(--cyan), #6fffe0); }
+    .weapon.selected .bar i::after { background: linear-gradient(90deg, var(--gold), #ff9d3c); }
+    .weapon .specs { margin: 10px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+
+    /* Match card */
+    .match-card { padding: 16px 20px 18px; display: grid; gap: 14px; }
+    .map { display: grid; gap: 4px; padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(255,207,74,.25); background: linear-gradient(135deg, rgba(255,207,74,.12), rgba(0,240,255,.06)); }
+    .map-name { font: 900 20px var(--display); letter-spacing: .06em; }
+    .map-sub { color: var(--muted); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
+    .rules { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .rule { padding: 9px 10px; border-radius: 10px; background: rgba(255,255,255,.03); font-size: 12px; color: var(--muted); }
+    .rule-value { display: block; color: var(--text); font: 700 14px var(--display); }
+    .status { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; font: 700 11px var(--display); letter-spacing: .14em; background: rgba(88,255,156,.12); color: var(--green); }
+    .pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; }
+    .pill.ended { background: rgba(255,207,74,.12); color: var(--gold); }
+    .pill.offline { background: rgba(255,95,109,.12); color: var(--red); }
+    .ping { color: var(--muted); font: 700 11px var(--display); letter-spacing: .1em; }
+    .players { margin: 0; padding: 0 12px 12px; display: grid; gap: 6px; }
+    .players li { list-style: none; display: grid; grid-template-columns: 26px 1fr auto auto; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 10px; background: rgba(255,255,255,.03); font-size: 13px; }
+    .players li.me { outline: 1px solid rgba(255,207,74,.4); }
+    .players .pos { color: var(--muted); font: 700 11px var(--display); }
+    .players .k, .players .d { min-width: 34px; text-align: right; font: 700 13px var(--display); }
+    .players .k { color: var(--gold); }
+    .players .d { color: var(--muted); }
+    .players-head { display: grid; grid-template-columns: 26px 1fr auto auto; gap: 10px; padding: 0 22px 6px; color: var(--muted); font: 700 10px var(--display); letter-spacing: .14em; }
+    .players-head span:nth-child(n+3) { min-width: 34px; text-align: right; }
+
+    /* Deploy bar */
+    .deploy-bar { position: sticky; bottom: 12px; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 16px 22px; border: 1px solid var(--panel-border); border-radius: 18px; background: var(--panel); }
+    .deploy-info { color: var(--muted); font-size: 13px; }
+    .deploy-info .who { color: var(--text); }
+    #deploy { min-width: 260px; border: 0; border-radius: 12px; padding: 18px 28px; cursor: pointer; color: #0b0f19; background: linear-gradient(135deg, #ffe179, #ee9e19); box-shadow: 0 12px 34px rgba(255,207,74,.32); font: 900 19px var(--display); letter-spacing: .12em; text-transform: uppercase; transition: transform .2s ease, filter .2s ease; }
+    #deploy:hover { transform: translateY(-2px); filter: brightness(1.08); }
+
+    @media (max-width: 1100px) {
+      .columns { grid-template-columns: 1fr; }
+      .stage { order: -1; }
+      .preview { min-height: 320px; }
+    }
+    @media (max-width: 640px) {
+      .topbar { flex-wrap: wrap; }
+      .weapons { grid-template-columns: 1fr; }
+      .deploy-bar { flex-direction: column; align-items: stretch; text-align: center; }
+    }
   </style>
 </head>
 <body>
-  <main>
-    <section class="copy">
-      <p class="eyebrow">MULTIPLAYER STAGING</p>
-      <h1>HEAD<span>SHOT</span></h1>
-      <div class="divider"></div>
-      <p class="welcome">Welcome back, <span id="player-name"></span>.</p>
-      <p class="desc">Review your operative, then deploy into the next tactical match.</p>
-      <div class="actions">
-        <button id="start-game" type="button">Start Game</button>
-        <a class="settings-link" href="/settings.html">Settings &amp; Controls</a>
-        <button id="logout-btn" type="button">Log out</button>
+  <div class="lobby">
+    <header class="topbar">
+      <div class="brand">
+        <h1>HEAD<span>SHOT</span></h1>
+        <p class="eyebrow">MULTIPLAYER STAGING · KATHMANDU</p>
       </div>
-    </section>
-    <section class="preview" aria-label="Your character preview"><canvas id="character-preview"></canvas></section>
-  </main>
+      <div class="identity">
+        <div class="chip"><span class="avatar" id="chip-avatar"></span><div><strong id="player-name"></strong><small id="player-kind"></small></div></div>
+        <a class="ghost" href="/settings.html">Settings &amp; Controls</a>
+        <button class="ghost" id="logout-btn" type="button">Log out</button>
+      </div>
+    </header>
+
+    <div class="columns">
+      <div class="column">
+        <section class="card">
+          <h2>OPERATIVE <span>CAREER</span></h2>
+          <div class="operative">
+            <div class="operative-head">
+              <span class="avatar" id="avatar"></span>
+              <div>
+                <strong id="operative-name"></strong>
+                <span class="rank" id="rank"></span>
+              </div>
+            </div>
+            <div>
+              <div class="rank-progress"><i id="rank-progress"></i></div>
+              <p class="rank-next" id="rank-next"></p>
+            </div>
+            <div class="stats">
+              <div class="stat"><b class="stat-value" id="stat-kd">0.00</b><span class="stat-label">K/D</span></div>
+              <div class="stat"><b class="stat-value" id="stat-kills">0</b><span class="stat-label">Kills</span></div>
+              <div class="stat"><b class="stat-value" id="stat-deaths">0</b><span class="stat-label">Deaths</span></div>
+              <div class="stat"><b class="stat-value" id="stat-wins">0</b><span class="stat-label">Wins</span></div>
+              <div class="stat"><b class="stat-value" id="stat-matches">0</b><span class="stat-label">Matches</span></div>
+              <div class="stat"><b class="stat-value" id="stat-headshots">0%</b><span class="stat-label">Headshots</span></div>
+            </div>
+          </div>
+        </section>
+        <section class="card">
+          <h2>RECENT MATCHES <span id="best-kills"></span></h2>
+          <ul class="recent" id="recent"></ul>
+        </section>
+      </div>
+
+      <section class="card stage">
+        <div class="preview" role="img" aria-label="Your character preview">
+          <canvas id="character-preview"></canvas>
+          <div class="label"><b>THE KING</b><span>Girvan Yuddha Bikram Shah · 1814</span></div>
+          <div class="sync">OPERATIVE READY  //  LOADOUT SYNCHRONIZED</div>
+        </div>
+        <div class="loadout">
+          <h2>LOADOUT <span>SPAWN WITH</span></h2>
+          <div class="weapons" id="weapons"></div>
+        </div>
+      </section>
+
+      <div class="column">
+        <section class="card">
+          <h2>MATCH <span id="match-players"></span></h2>
+          <div class="match-card">
+            <div class="map"><b class="map-name">DURBAR SQUARE</b><span class="map-sub">Old Kathmandu · Free-for-all</span></div>
+            <div class="rules">
+              <div class="rule"><b class="rule-value" id="rule-kills">15</b>kills to win</div>
+              <div class="rule"><b class="rule-value" id="rule-players">8</b>players max</div>
+            </div>
+            <div class="status"><span class="pill" id="status-pill">CONNECTING</span><span class="ping" id="ping"></span></div>
+          </div>
+        </section>
+        <section class="card">
+          <h2>IN THE MATCH NOW</h2>
+          <div class="players-head"><span>#</span><span>PLAYER</span><span>K</span><span>D</span></div>
+          <ul class="players" id="players"></ul>
+        </section>
+      </div>
+    </div>
+
+    <footer class="deploy-bar">
+      <p class="deploy-info" id="deploy-info"></p>
+      <button id="deploy" type="button">Deploy</button>
+    </footer>
+  </div>
   <script type="module" src="/dist/lobby.js"></script>
 </body>
 </html>

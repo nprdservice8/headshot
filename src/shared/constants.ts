@@ -65,18 +65,10 @@ export const HEALTH_REGEN_TRIGGER_HP = 50;
 export const HEALTH_REGEN_DELAY_TICKS = 5 * TICK_RATE;
 /** One health point every fifth of a second after regeneration starts. */
 export const HEALTH_REGEN_INTERVAL_TICKS = TICK_RATE / 5;
-export const BODY_DAMAGE = 25;
-export const FIRE_INTERVAL_TICKS = 8;
-export const RIFLE_RANGE = 150;
-export const ROCKET_SPEED = 42;
-export const ROCKET_RADIUS = 0.14;
-export const ROCKET_LIFETIME_TICKS = 3 * TICK_RATE;
-export const ROCKET_COOLDOWN_TICKS = 90;
-export const ROCKETS_PER_LIFE = 3;
+// Per-weapon numbers (damage, fire rate, range, reload, magazine, rockets) live in weapons.ts.
 export const MAX_LIVE_ROCKETS = 12;
-export const ROCKET_EXPLOSION_RADIUS = 5;
-export const ROCKET_EXPLOSION_MAX_DAMAGE = 125;
-export const ROCKET_EXPLOSION_KNOCKBACK = 16;
+/** A rocket is drawn leaving its shooter's gun and slides onto its true path over this distance. */
+export const ROCKET_CONVERGE_DISTANCE = 6;
 
 // Grenades and explosions
 export const GRENADES_PER_LIFE = 2;
@@ -129,9 +121,44 @@ export const SCENERY_LIGHT_RANGE = 2;
 export const MOUSE_SENSITIVITY = 0.0022;
 export const FIELD_OF_VIEW_DEG = 80;
 export const MAX_FRAME_MS = 250;
-export const TRACER_LIFETIME_MS = 60;
+/** Match results the lobby keeps per player. */
+export const RECENT_MATCHES_KEPT = 6;
+/** How often the lobby asks the server who is playing. */
+export const LOBBY_POLL_MS = 2000;
+// Footsteps (client/footsteps.ts): a step sounds every stride of ground covered.
+export const FOOTSTEP_MIN_SPEED = 0.5;
+export const WALK_STRIDE = 1.9;
+export const SPRINT_STRIDE = 2.6;
+export const OWN_FOOTSTEP_GAIN = 0.35;
+export const SPRINT_FOOTSTEP_GAIN = 0.5;
+export const OTHER_FOOTSTEP_GAIN = 0.7;
+export const FOOTSTEP_MAX_DISTANCE = 30;
+export const JUMP_SOUND_GAIN = 0.3;
+/** Landing volume ramps between these descent speeds (m/s). */
+export const LANDING_SOFT_SPEED = 3;
+export const LANDING_HARD_SPEED = 12;
+export const LANDING_MIN_GAIN = 0.25;
+export const LANDING_MAX_GAIN = 0.9;
+// Weapon and explosion sounds (client/audio.ts), before distance falloff.
+export const OWN_SHOT_GAIN = 0.7;
+export const OWN_LAUNCH_GAIN = 0.9;
+export const REMOTE_SHOT_GAIN = 0.8;
+export const REMOTE_LAUNCH_GAIN = 1;
+export const GUNSHOT_SOUND_DISTANCE = 160;
+export const LAUNCH_SOUND_DISTANCE = 200;
+export const EXPLOSION_SOUND_GAIN = 1.2;
+export const EXPLOSION_SOUND_DISTANCE = 220;
+export const EXPLOSION_THUMP_GAIN = 0.8;
+// Reloading (client/reload.ts): recorded gun handling at set fractions of the weapon's reload time.
+export const OWN_RELOAD_GAIN = 0.5;
+export const OTHER_RELOAD_GAIN = 0.6;
+export const RELOAD_SOUND_DISTANCE = 25;
+/** Hits are instant; bullets are drawn flying this fast (m/s) so the shot can be seen. */
+export const BULLET_VISUAL_SPEED = 220;
+/** Length of the streak drawn for a flying bullet. */
+export const BULLET_STREAK_LENGTH = 0.7;
 export const MUZZLE_FLASH_MS = 50;
-export const EXPLOSION_EFFECT_MS = 350;
+export const EXPLOSION_EFFECT_MS = 700;
 export const RAGDOLL_LIFETIME_MS = 10_000;
 export const MAX_RAGDOLLS = 6;
 export const RAGDOLL_SHOT_SPEED = 3;

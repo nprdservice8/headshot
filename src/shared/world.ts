@@ -229,8 +229,9 @@ const container = (x: number, z: number, alongX: boolean, long = false) => {
     ? onGround(x, z, length, 1.22, CONTAINER_HEIGHT, "container")
     : onGround(x, z, 1.22, length, CONTAINER_HEIGHT, "container");
 };
-const truck = (x: number, z: number, yaw: number) => onGround(x, z, 1.25, 3.9, 3.1, "truck", yaw);
-const car = (x: number, z: number, yaw: number) => onGround(x, z, 0.9, 2.1, 1.6, "car", yaw);
+// Sized close to the Car Kit models (art/props.py) so fitting them barely stretches them.
+const truck = (x: number, z: number, yaw: number) => onGround(x, z, 1.25, 2.9, 2.5, "truck", yaw);
+const car = (x: number, z: number, yaw: number) => onGround(x, z, 0.9, 1.7, 1.55, "car", yaw);
 
 const RING_HEIGHTS = [11, 9, 12.5, 8.5, 10.5, 9.5, 12];
 

@@ -1,8 +1,14 @@
-"""Builds everything a player carries: the soldier with its animations and rifle, the first-person
-arms and rifle, and the grenade. Writes character.glb, viewmodel.glb and grenade.glb to art/out/.
+"""Builds everything a player carries: the two characters with their animations and rifle, the
+first-person arms and weapons, and the grenade. Writes character.glb, viewmodel.glb and
+grenade.glb to art/out/.
 
-Sources (CC0, Quaternius): Swat.gltf from Ultimate Modular Men, AssaultRifle2_1.blend from the
-Ultimate Gun Pack, Grenade.gltf from the Toon Shooter Game Kit."""
+The characters are two adversaries of the 1814 war dressed from the same modular body: the King
+(you) after the portrait of Girvan Yuddha Bikram Shah, and the General (everyone else) after Sir
+David Ochterlony. Both share one skeleton and one set of animations.
+
+Sources (CC0, Quaternius): Swat.gltf (rig and animations) and Suit.gltf (body parts) from
+Ultimate Modular Men, AssaultRifle2_1.blend and SubmachineGun_2.blend from the Ultimate Gun Pack,
+Grenade.gltf and RocketLauncher.gltf from the Toon Shooter Game Kit."""
 
 import math
 import os
@@ -17,6 +23,7 @@ from common import (  # noqa: E402
     OUT_DIR,
     append_objects,
     apply_transform,
+    base_name,
     bounds,
     export_glb,
     flatten_materials,
@@ -34,6 +41,26 @@ RIFLE_SCALE = 0.84 / 5.169
 GRENADE_SIZE = 0.2
 ANIMATION_FPS = 30
 
+# Linear RGB albedos, like the packs' material colours. Real-world values, since the sun and sky
+# lights blow anything lighter out to white.
+SILK_BLUE = (0.18, 0.32, 0.6, 1)
+CREAM = (0.55, 0.42, 0.2, 1)
+PEARL = (0.85, 0.85, 0.82, 1)
+WHITE = (0.7, 0.7, 0.7, 1)
+GOLD = (0.5, 0.27, 0.03, 1)
+EMERALD = (0.05, 0.45, 0.15, 1)
+SCARLET = (0.55, 0.03, 0.03, 1)
+NAVY = (0.02, 0.03, 0.1, 1)
+BLACK = (0.02, 0.02, 0.02, 1)
+DARK_HAIR = (0.03, 0.02, 0.015, 1)
+WHITE_HAIR = (0.5, 0.5, 0.48, 1)
+GREY = (0.4, 0.4, 0.4, 1)
+NEPALI_SKIN = (0.2, 0.11, 0.06, 1)
+BRITISH_SKIN = (0.36, 0.23, 0.18, 1)
+# Sleeve faces further out along the arm than this (metres from the spine, in the T-pose) are
+# the cuffs, which both uniforms trim in gold.
+CUFF_FROM_X = 0.49
+
 FORWARD = Vector((0, -1, 0))  # the imported soldier faces -Y
 UP = Vector((0, 0, 1))
 RIGHT = Vector((-1, 0, 0))
@@ -43,14 +70,20 @@ RIFLE_HANDGUARD = Vector((0, -0.22, 0.075))
 RIFLE_MUZZLE = Vector((0, -0.585, 0.1035))
 RIFLE_BUTT = Vector((0, 0.2535, 0.057))
 
-# The SMG and bazooka are built procedurally (no CC0 source model for either), in the same
-# grip-at-origin, barrel-along-Y convention as the rifle. Muzzle only: they ride the rifle's
-# grip pose rather than getting their own hand IK, which is close enough for a held prop.
-GUNMETAL = (0.05, 0.05, 0.055, 1)
-OLIVE_DRAB = (0.14, 0.17, 0.1, 1)
-MATTE_BLACK = (0.02, 0.02, 0.02, 1)
-SMG_MUZZLE = Vector((0, -0.34, 0.05))
-BAZOOKA_MUZZLE = Vector((0, -0.75, 0))
+# The SMG and bazooka share the rifle's grip-at-origin, barrel-along--Y convention and ride its
+# hand pose rather than getting their own IK, which is close enough for a held prop.
+# The gun pack's SMG has the same grip origin and unit scale as its rifle; the support hand
+# holds the front of its receiver, just ahead of the magazine.
+SMG_SCALE = RIFLE_SCALE
+SMG_MUZZLE = Vector((0, -0.365, 0.092))
+SMG_HANDGUARD = Vector((0, -0.2, 0.06))
+# The toon kit's launcher is fat and comes in metres with its grip 13 cm ahead of the origin;
+# it's shrunk to a shoulder-sized tube, then shifted so the grip lands in the hand and the
+# support hand cups the tube's underside.
+BAZOOKA_SCALE = 0.5
+BAZOOKA_OFFSET = Vector((0, 0.065, -0.05))
+BAZOOKA_MUZZLE = Vector((0, -0.325, 0.134))
+BAZOOKA_HANDGUARD = Vector((0, -0.16, 0.01))
 
 # Where the right wrist sits relative to a grip, measured from the pack's pistol pose.
 WRIST_IN_GRIP = Matrix(
@@ -65,8 +98,10 @@ WRIST_IN_GRIP = Matrix(
 AIM_TWIST_DEG = -28
 # Third-person rifle butt, relative to the right shoulder once the chest has twisted.
 AIM_BUTT_OFFSET = Vector((0.04, -0.06, 0.03))
-# First-person rifle grip, relative to the eye (right, forward, up).
+# First-person grip positions relative to the eye (right, forward, up). The launcher's grip is
+# mid-tube, so it's held further out to keep its rear end clear of the camera.
 VIEW_GRIP_OFFSET = (0.17, 0.36, -0.25)
+VIEW_BAZOOKA_GRIP_OFFSET = (0.18, 0.4, -0.27)
 VIEW_YAW_DEG = 5
 VIEW_FOV_DEG = 60
 # The first-person arms have no body, so their shoulders move forward to reach the rifle.
@@ -156,40 +191,11 @@ def mirror_fingers(armature):
     update()
 
 
-def build_soldier():
-    objects = import_gltf("Swat.gltf")
-    armature = next(o for o in objects if o.type == "ARMATURE")
-    meshes = [o for o in objects if o.parent == armature and o.name != "Pistol"]
-    # The importer also brings in the pistol and a bone-display sphere, neither of which we want.
-    for obj in objects:
-        if obj.type == "MESH" and obj not in meshes:
-            bpy.data.objects.remove(obj)
-    for mesh in meshes:
-        # "Swat" is the uniform colour: white in the vertex colours, tinted per player at runtime.
-        flatten_materials(
-            mesh,
-            color_override=lambda name: (1, 1, 1, 1) if name == "Swat" else None,
-            group_of=lambda name: "Team" if name == "Swat" else "Body",
-        )
-    soldier = join(meshes)
-    soldier.name = "Soldier"
-    return armature, soldier
-
-
-def build_rifle():
-    rifle = append_objects("AssaultRifle2_1.blend")[0]
-    rifle.name = "Rifle"
-    flatten_materials(rifle)
-    rifle.scale = (RIFLE_SCALE,) * 3
-    rifle.rotation_euler = (0, 0, math.radians(-90))
-    apply_transform(rifle)
-    return rifle
-
-
-def _colored_object(name, verts, faces, color):
+def _colored_object(name, verts, faces, color, bone):
     """A standalone mesh object from raw geometry, built without bpy.ops so it works the same in
-    background mode. Normals are recalculated rather than trusted, since face winding above is
-    whatever was convenient to write, not guaranteed outward."""
+    background mode, weighted entirely to `bone` so it rides along once joined into a character.
+    Normals are recalculated rather than trusted, since the winding above is whatever was
+    convenient to write."""
     mesh = bpy.data.meshes.new(name)
     mesh.from_pydata(verts, [], faces)
     mesh.update()
@@ -204,63 +210,231 @@ def _colored_object(name, verts, faces, color):
     mesh.materials.append(material)
     obj = bpy.data.objects.new(name, mesh)
     bpy.context.scene.collection.objects.link(obj)
+    obj.vertex_groups.new(name=bone).add(list(range(len(verts))), 1.0, "REPLACE")
     return obj
 
 
-def _box(name, center, half, color):
+def _lathe(name, center, profile, color, bone, sides=12, closed=False):
+    """A surface of revolution about the vertical axis through `center`. `profile` lists
+    (radius, height) pairs from bottom to top; the ends are capped unless the profile is a
+    `closed` loop (a ring)."""
     cx, cy, cz = center
-    hx, hy, hz = half
-    verts = [
-        (cx - hx, cy - hy, cz - hz), (cx + hx, cy - hy, cz - hz),
-        (cx + hx, cy + hy, cz - hz), (cx - hx, cy + hy, cz - hz),
-        (cx - hx, cy - hy, cz + hz), (cx + hx, cy - hy, cz + hz),
-        (cx + hx, cy + hy, cz + hz), (cx - hx, cy + hy, cz + hz),
-    ]
-    faces = [(0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (1, 5, 6, 2), (2, 6, 7, 3), (3, 7, 4, 0)]
-    return _colored_object(name, verts, faces, color)
-
-
-def _tube(name, base_y, tip_y, radius, color, radius_tip=None, sides=10):
-    """A cylinder (a frustum, when `radius_tip` differs) running along Y from `base_y` to `tip_y`."""
-    radius_tip = radius if radius_tip is None else radius_tip
     ring = [(math.cos(2 * math.pi * k / sides), math.sin(2 * math.pi * k / sides)) for k in range(sides)]
-    verts = [(c * radius, base_y, s * radius) for c, s in ring]
-    verts += [(c * radius_tip, tip_y, s * radius_tip) for c, s in ring]
+    verts = [(cx + c * r, cy + s * r, cz + h) for r, h in profile for c, s in ring]
+    count = len(profile)
+    faces = []
+    for i in range(count if closed else count - 1):
+        j = (i + 1) % count
+        for k in range(sides):
+            faces.append((i * sides + k, i * sides + (k + 1) % sides, j * sides + (k + 1) % sides, j * sides + k))
+    if not closed:
+        faces.append(tuple(range(sides)))
+        faces.append(tuple(range(count * sides - 1, (count - 1) * sides - 1, -1)))
+    return _colored_object(name, verts, faces, color, bone)
+
+
+def _ring(name, center, radius, thickness, color, bone):
+    profile = [
+        (radius + thickness * math.cos(t), thickness * math.sin(t))
+        for t in (2 * math.pi * k / 6 for k in range(6))
+    ]
+    return _lathe(name, center, profile, color, bone, sides=16, closed=True)
+
+
+def _tube(name, start, end, color, bone, radius, radius_end=None, flat=1.0, flat_axis=None, sides=8):
+    """A tube from `start` to `end`, tapering to `radius_end`. `flat` squashes its section to that
+    fraction along `flat_axis`, which makes a strip lying against a surface with that normal."""
+    start, end = Vector(start), Vector(end)
+    axis = (end - start).normalized()
+    across = (flat_axis or UP).cross(axis)
+    if across.length < 1e-3:
+        across = RIGHT.cross(axis)
+    across.normalize()
+    thin = axis.cross(across)
+    verts = []
+    for point, r in ((start, radius), (end, radius if radius_end is None else radius_end)):
+        for k in range(sides):
+            a = 2 * math.pi * k / sides
+            verts.append(tuple(point + across * (math.cos(a) * r) + thin * (math.sin(a) * r * flat)))
     faces = [(k, (k + 1) % sides, sides + (k + 1) % sides, sides + k) for k in range(sides)]
     faces.append(tuple(range(sides)))
     faces.append(tuple(range(2 * sides - 1, sides - 1, -1)))
-    return _colored_object(name, verts, faces, color)
+    return _colored_object(name, verts, faces, color, bone)
+
+
+def paint_faces(obj, color, indices):
+    """Recolours the given faces of a flattened mesh."""
+    colors = obj.data.color_attributes["Color"]
+    for index in indices:
+        for loop_index in obj.data.polygons[index].loop_indices:
+            colors.data[loop_index].color = color
+
+
+def cuff_faces(body):
+    """The coat's sleeve faces out at the wrists, found before flattening loses the materials."""
+    materials = [base_name(m) for m in body.data.materials]
+    return [
+        p.index
+        for p in body.data.polygons
+        if materials[p.material_index] == "Suit" and abs(p.center.x) > CUFF_FROM_X
+    ]
+
+
+def import_rig():
+    """The pack's shared skeleton with its animations. The SWAT's clothes come along but are the
+    wrong century, so only the armature is kept."""
+    objects = import_gltf("Swat.gltf")
+    armature = next(o for o in objects if o.type == "ARMATURE")
+    for obj in objects:
+        if obj.type == "MESH":
+            bpy.data.objects.remove(obj)
+    return armature
+
+
+def import_body_parts(armature):
+    """The Suit's head, coat, trousers and shoes, rehomed onto the shared rig. The importer brings
+    a second copy of the rig and its animations; the rig copy goes now and keep_clips drops the
+    duplicate actions later."""
+    objects = import_gltf("Suit.gltf")
+    wanted = [o for o in objects if o.type == "MESH" and o.parent and not o.name.startswith("Pistol")]
+    parts = {}
+    for obj in wanted:
+        parts[obj.name.split("_")[1].split(".")[0]] = obj
+        obj.parent = armature
+        for modifier in obj.modifiers:
+            if modifier.type == "ARMATURE":
+                modifier.object = armature
+    for obj in objects:
+        if obj not in wanted:
+            bpy.data.objects.remove(obj)
+    return parts
+
+
+def copy_parts(parts):
+    copies = {}
+    for name, part in parts.items():
+        copy = part.copy()
+        copy.data = part.data.copy()
+        bpy.context.scene.collection.objects.link(copy)
+        copies[name] = copy
+    return copies
+
+
+def dress(name, parts, palettes, accessories):
+    """One look: each body part recoloured from its palette (material name to colour), gold cuffs,
+    plus accessories, all joined into a single skinned mesh."""
+    meshes = []
+    cuffs = cuff_faces(parts["Body"])
+    for part_name, part in parts.items():
+        palette = palettes[part_name]
+        flatten_materials(part, color_override=lambda material, palette=palette: palette.get(material))
+        meshes.append(part)
+    paint_faces(parts["Body"], GOLD, cuffs)
+    for accessory in accessories:
+        flatten_materials(accessory)
+        meshes.append(accessory)
+    look = join(meshes)
+    look.name = name
+    return look
+
+
+def build_king(parts):
+    """After the c. 1815 portrait: pale blue silk robe with a gold sash and pearls, a white
+    jewelled headdress with a tall plume, dark hair."""
+    # The band sits just above the brow: the eyes are at about z 1.7 and must stay uncovered.
+    crown = Vector((0, -0.045, 1.735))
+    accessories = [
+        _lathe(
+            "Cap",
+            crown,
+            [(0.145, 0), (0.16, 0.045), (0.16, 0.1), (0.135, 0.16), (0.085, 0.21), (0.005, 0.24)],
+            WHITE,
+            "Head",
+            sides=14,
+        ),
+        _lathe("Band", crown - UP * 0.005, [(0.155, 0), (0.155, 0.035)], GOLD, "Head", sides=14),
+        _tube("Plume", (0, -0.13, 1.94), (0.03, -0.03, 2.24), WHITE, "Head", 0.035, 0.008),
+        _ring("Necklace", (0, -0.06, 1.48), 0.11, 0.018, PEARL, "Chest"),
+        _ring("Necklace2", (0, -0.07, 1.43), 0.13, 0.014, PEARL, "Chest"),
+        _tube("Sash", (0.1, -0.205, 1.47), (-0.12, -0.175, 1.12), CREAM, "Chest", 0.04, flat=0.25, flat_axis=FORWARD),
+    ]
+    for i, x in enumerate((-0.055, 0, 0.055)):
+        profile = [(0.012, 0), (0.017, 0.012), (0.012, 0.024)]
+        color = EMERALD if i == 1 else PEARL
+        accessories.append(_lathe(f"Gem{i}", (x, crown.y - 0.15, crown.z + 0.004), profile, color, "Head"))
+    return dress(
+        "King",
+        parts,
+        {
+            "Head": {"Skin": NEPALI_SKIN, "Hair": DARK_HAIR, "Eyebrows": DARK_HAIR},
+            "Body": {"Skin": NEPALI_SKIN, "Suit": SILK_BLUE, "White": CREAM, "Tie": PEARL},
+            "Legs": {"Suit": WHITE},
+            "Feet": {"Black": GOLD},
+        },
+        accessories,
+    )
+
+
+def build_general(parts):
+    """After the engraving: scarlet coat with gold epaulettes and chest cords over a sash, white
+    cravat and breeches, black boots, white curls."""
+    accessories = [
+        _tube("Cord", (-0.13, -0.13, 1.46), (0.0, -0.2, 1.3), GOLD, "Chest", 0.008),
+        _tube("Cord2", (-0.15, -0.14, 1.44), (-0.02, -0.2, 1.24), GOLD, "Chest", 0.008),
+        _tube("Sash", (0.1, -0.205, 1.47), (-0.12, -0.175, 1.12), PEARL, "Chest", 0.045, flat=0.25, flat_axis=FORWARD),
+    ]
+    for side, x in (("L", 0.15), ("R", -0.15)):
+        profile = [(0.05, 0), (0.058, 0.015), (0.045, 0.03)]
+        accessories.append(_lathe(f"Epaulette.{side}", (x, -0.06, 1.465), profile, GOLD, f"Shoulder.{side}"))
+    return dress(
+        "General",
+        parts,
+        {
+            "Head": {"Skin": BRITISH_SKIN, "Hair": WHITE_HAIR, "Eyebrows": GREY},
+            "Body": {"Skin": BRITISH_SKIN, "Suit": SCARLET, "White": WHITE, "Tie": NAVY},
+            "Legs": {"Suit": WHITE},
+            "Feet": {"Black": BLACK},
+        },
+        accessories,
+    )
+
+
+def build_characters():
+    """The shared rig with the King and the General skinned to it."""
+    armature = import_rig()
+    parts = import_body_parts(armature)
+    king = build_king(copy_parts(parts))
+    general = build_general(parts)
+    return armature, king, general
+
+
+def build_gun(file_name, name, scale, yaw_deg, offset=Vector()):
+    """A gun from the packs, scaled to metres with its grip at the origin and barrel along -Y."""
+    load = append_objects if file_name.endswith(".blend") else import_gltf
+    gun = load(file_name)[0]
+    gun.name = name
+    flatten_materials(gun)
+    # Composed onto the import's own transform: glTF files arrive with a node scale and rotation.
+    gun.matrix_world = (
+        Matrix.Translation(offset)
+        @ Matrix.Rotation(math.radians(yaw_deg), 4, "Z")
+        @ Matrix.Scale(scale, 4)
+        @ gun.matrix_world
+    )
+    apply_transform(gun)
+    return gun
+
+
+def build_rifle():
+    return build_gun("AssaultRifle2_1.blend", "Rifle", RIFLE_SCALE, -90)
 
 
 def build_smg():
-    """No CC0 source for an SMG, so it's a handful of boxes: a short, blocky compact gun."""
-    parts = [
-        _box("SmgReceiver", (0, -0.04, 0.05), (0.0275, 0.15, 0.0375), GUNMETAL),
-        _tube("SmgBarrel", -0.19, -0.34, 0.016, GUNMETAL),
-        _box("SmgStock", (0, 0.155, 0.05), (0.015, 0.045, 0.015), GUNMETAL),
-        _box("SmgMag", (0, -0.05, -0.09), (0.015, 0.045, 0.07), MATTE_BLACK),
-        _box("SmgGrip", (0, 0.02, -0.07), (0.014, 0.025, 0.06), MATTE_BLACK),
-    ]
-    smg = join(parts)
-    smg.name = "Smg"
-    flatten_materials(smg)
-    return smg
+    return build_gun("SubmachineGun_2.blend", "Smg", SMG_SCALE, -90)
 
 
 def build_bazooka():
-    """A real bazooka silhouette: a long tube with a flared rear vent, sights, and two grips."""
-    parts = [
-        _tube("BazookaTube", -0.7, 0.3, 0.055, OLIVE_DRAB),
-        _tube("BazookaFlare", 0.3, 0.45, 0.055, GUNMETAL, radius_tip=0.085),
-        _box("BazookaFrontSight", (0, -0.45, 0.09), (0.01, 0.025, 0.025), MATTE_BLACK),
-        _box("BazookaRearSight", (0, -0.05, 0.075), (0.009, 0.015, 0.02), MATTE_BLACK),
-        _box("BazookaFrontGrip", (0, -0.15, -0.1), (0.015, 0.025, 0.045), MATTE_BLACK),
-        _box("BazookaGrip", (0, 0.02, -0.09), (0.015, 0.025, 0.065), MATTE_BLACK),
-    ]
-    bazooka = join(parts)
-    bazooka.name = "Bazooka"
-    flatten_materials(bazooka)
-    return bazooka
+    return build_gun("RocketLauncher.gltf", "Bazooka", BAZOOKA_SCALE, 90, BAZOOKA_OFFSET)
 
 
 def freeze_pose(armature, action_name, frame):
@@ -346,57 +520,68 @@ def extract_arms(soldier):
     return arms
 
 
-def build_viewmodel(armature, soldier, rifle):
-    eye = eye_matrix(armature).translation
-    right, forward, up = VIEW_GRIP_OFFSET
-    grip = eye + RIGHT * right + FORWARD * forward + UP * up
-    rifle_frame = Matrix.Translation(grip) @ Matrix.Rotation(math.radians(VIEW_YAW_DEG), 4, "Z")
+def pose_hands(armature, frame, handguard):
+    """Both hands on a gun held at `frame`: the right on its grip, the left under `handguard`."""
     bones = armature.pose.bones
-    for side, shift in VIEW_SHOULDER_SHIFT.items():
-        shoulder = bones[f"Shoulder.{side}"]
-        shoulder.matrix = Matrix.Translation(shift) @ shoulder.matrix
-        update()
     solve_arm(
         armature,
         "R",
-        rifle_frame @ WRIST_IN_GRIP,
+        frame @ WRIST_IN_GRIP,
         bones["UpperArm.R"].head + Vector((-0.4, 0.1, -0.4)),
     )
     solve_arm(
         armature,
         "L",
-        left_wrist_on(rifle_frame @ RIFLE_HANDGUARD),
+        left_wrist_on(frame @ handguard),
         bones["UpperArm.L"].head + Vector((0.35, -0.1, -0.4)),
     )
-    arms = extract_arms(soldier)
 
-    # The SMG and bazooka ride the same grip pose as the rifle (see build_smg/build_bazooka):
-    # one held-prop pose for all three weapons, swapped by visibility client-side.
+
+def build_viewmodel(armature, soldier, rifle):
+    """The first-person arms and weapons. Each weapon gets its own hand pose and so its own copy
+    of the arms; the client shows one weapon and its arms at a time."""
+    eye = eye_matrix(armature).translation
+    bones = armature.pose.bones
+    for side, shift in VIEW_SHOULDER_SHIFT.items():
+        shoulder = bones[f"Shoulder.{side}"]
+        shoulder.matrix = Matrix.Translation(shift) @ shoulder.matrix
+        update()
+
     weapons = [
-        ("ViewRifle", rifle, "MuzzleRifle", RIFLE_MUZZLE),
-        ("ViewSmg", build_smg(), "MuzzleSmg", SMG_MUZZLE),
-        ("ViewBazooka", build_bazooka(), "MuzzleBazooka", BAZOOKA_MUZZLE),
+        ("Rifle", rifle, VIEW_GRIP_OFFSET, RIFLE_HANDGUARD, RIFLE_MUZZLE),
+        ("Smg", build_smg(), VIEW_GRIP_OFFSET, SMG_HANDGUARD, SMG_MUZZLE),
+        ("Bazooka", build_bazooka(), VIEW_BAZOOKA_GRIP_OFFSET, BAZOOKA_HANDGUARD, BAZOOKA_MUZZLE),
     ]
+    arms = []
     view_weapons = []
     muzzles = []
-    for name, source, muzzle_name, muzzle_point in weapons:
+    for name, source, grip_offset, handguard, muzzle_point in weapons:
+        right, forward, up = grip_offset
+        grip = eye + RIGHT * right + FORWARD * forward + UP * up
+        frame = Matrix.Translation(grip) @ Matrix.Rotation(math.radians(VIEW_YAW_DEG), 4, "Z")
+        pose_hands(armature, frame, handguard)
+        weapon_arms = extract_arms(soldier)
+        weapon_arms.name = f"Arms{name}"
+        arms.append(weapon_arms)
         view_weapon = source.copy()
         view_weapon.data = source.data.copy()
         view_weapon.parent = None
         bpy.context.scene.collection.objects.link(view_weapon)
-        view_weapon.name = name
-        view_weapon.matrix_world = rifle_frame
+        view_weapon.name = f"View{name}"
+        view_weapon.matrix_world = frame
         view_weapons.append(view_weapon)
-        muzzles.append(empty(muzzle_name, rifle_frame @ Matrix.Translation(muzzle_point)))
+        # The rifle source is still needed for the third-person soldier; the others are not.
+        if source is not rifle:
+            bpy.data.objects.remove(source)
+        muzzles.append(empty(f"Muzzle{name}", frame @ Matrix.Translation(muzzle_point)))
 
     # Camera space: the eye at the origin, forward along +Y and up along +Z, which the glTF
     # exporter turns into three.js camera space (forward -Z, up +Y).
     to_camera = Matrix.Rotation(math.pi, 4, "Z") @ Matrix.Translation(-eye)
-    for obj in (arms, *view_weapons, *muzzles):
+    for obj in (*arms, *view_weapons, *muzzles):
         obj.matrix_world = to_camera @ obj.matrix_world
-    apply_transform(arms)
-    for view_weapon in view_weapons:
-        apply_transform(view_weapon)
+    for obj in (*arms, *view_weapons):
+        apply_transform(obj)
     return arms, view_weapons, muzzles
 
 
@@ -468,7 +653,7 @@ def keep_clips():
             bpy.data.actions.remove(action)
 
 
-def export_character(armature, soldier, rifle, rifle_frame):
+def export_character(armature, looks, rifle, rifle_frame):
     muzzle = empty("Muzzle", rifle_frame @ Matrix.Translation(RIFLE_MUZZLE))
     muzzle.parent = rifle
     muzzle.matrix_world = rifle_frame @ Matrix.Translation(RIFLE_MUZZLE)
@@ -479,7 +664,7 @@ def export_character(armature, soldier, rifle, rifle_frame):
     root.scale = (SOLDIER_SCALE,) * 3
     update()
     keep_clips()
-    export_glb("character.glb", [root, armature, soldier, rifle, muzzle], animations=True)
+    export_glb("character.glb", [root, armature, *looks, rifle, muzzle], animations=True)
     armature.parent = None
     bpy.data.objects.remove(root)
     update()
@@ -488,7 +673,7 @@ def export_character(armature, soldier, rifle, rifle_frame):
 def main():
     reset_scene()
     bpy.context.scene.render.fps = ANIMATION_FPS
-    armature, soldier = build_soldier()
+    armature, king, general = build_characters()
     rifle = build_rifle()
     rifle_frame = pose_aim(armature, rifle)
     rifle.parent = armature
@@ -500,22 +685,31 @@ def main():
 
     if PREVIEW:
         target = Vector((0, -0.2, 1.3))
-        render_preview("aim_side", camera_looking(Vector((-2.2, -0.4, 1.4)), target), lens=35)
-        render_preview("aim_front", camera_looking(Vector((-0.8, -2.2, 1.5)), target), lens=35)
-        render_preview("aim_back", camera_looking(Vector((0.9, 1.8, 1.9)), target), lens=35)
+        for look, other in ((king, general), (general, king)):
+            other.hide_render = True
+            look.hide_render = False
+            name = look.name.lower()
+            render_preview(f"{name}_side", camera_looking(Vector((-2.2, -0.4, 1.4)), target), lens=35)
+            render_preview(f"{name}_front", camera_looking(Vector((-0.8, -2.2, 1.5)), target), lens=35)
+            render_preview(f"{name}_back", camera_looking(Vector((0.9, 1.8, 1.9)), target), lens=35)
 
     # The viewmodel comes first: exporting animations leaves the armature in some other pose.
-    arms, view_weapons, muzzles = build_viewmodel(armature, soldier, rifle)
+    arms, view_weapons, muzzles = build_viewmodel(armature, king, rifle)
     if PREVIEW:
-        for obj in (soldier, rifle, *view_weapons[1:]):
-            obj.hide_render = True
+        king.hide_render = True
+        general.hide_render = True
+        rifle.hide_render = True
         eye_camera = Matrix.Rotation(math.radians(90), 4, "X")
-        render_preview("viewmodel", eye_camera, lens=VIEW_FOV_DEG)
+        for shown_arms, shown_weapon in zip(arms, view_weapons):
+            for obj in (*arms, *view_weapons):
+                obj.hide_render = obj not in (shown_arms, shown_weapon)
+            name = shown_weapon.name[len("View") :].lower()
+            render_preview(f"viewmodel_{name}", eye_camera, lens=VIEW_FOV_DEG)
         return
-    export_glb("viewmodel.glb", [arms, *view_weapons, *muzzles])
-    for obj in (arms, *view_weapons, *muzzles):
+    export_glb("viewmodel.glb", [*arms, *view_weapons, *muzzles])
+    for obj in (*arms, *view_weapons, *muzzles):
         bpy.data.objects.remove(obj)
-    export_character(armature, soldier, rifle, rifle_frame)
+    export_character(armature, [king, general], rifle, rifle_frame)
     export_glb("grenade.glb", [build_grenade()])
 
 

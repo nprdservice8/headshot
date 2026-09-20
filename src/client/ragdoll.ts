@@ -11,7 +11,12 @@ import {
   RAGDOLL_LIFETIME_MS,
 } from "../shared/constants.ts";
 import { collisionGroups } from "../shared/world.ts";
-import { type CharacterModel, createCharacterModel, type PlayerView } from "./characters.ts";
+import {
+  type CharacterModel,
+  createCharacterModel,
+  type PlayerView,
+  setLook,
+} from "./characters.ts";
 
 // Ragdolls only exist in this browser. They never affect gameplay, so they are never networked.
 // Each body part is a physics body; every bone of the soldier's skeleton follows the part it
@@ -93,7 +98,7 @@ function mapBones(bones: readonly Object3D[]): Int8Array {
 export function initRagdolls(clientWorld: World, scene: Scene): void {
   world = clientWorld;
   for (let i = 0; i < MAX_RAGDOLLS; i++) {
-    const character = createCharacterModel(i);
+    const character = createCharacterModel("general");
     character.model.visible = false;
     for (const bone of character.bones) {
       // The physics writes these matrices; three.js must not recompute them from the hierarchy.
@@ -181,7 +186,7 @@ export function spawnRagdoll(
     const offset = ragdoll.offsets[index];
     if (part && offset) offset.copy(inverse.copy(part).invert()).multiply(bone.matrixWorld);
   });
-  ragdoll.teamMaterial.color.copy(view.teamMaterial.color);
+  setLook(ragdoll, view.look);
   ragdoll.model.visible = true;
   ragdoll.createdMs = nowMs;
   ragdoll.active = true;

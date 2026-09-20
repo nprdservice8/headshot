@@ -36,8 +36,9 @@ import {
   WALK_SPEED,
 } from "../shared/constants.ts";
 import { clamp } from "../shared/math.ts";
+import { weaponDefinition } from "../shared/weapons.ts";
 import type { Assets } from "./assets.ts";
-import { teamColor } from "./characters.ts";
+import type { ReloadMotion } from "./reload.ts";
 
 const FOG_NEAR = 60;
 const FOG_FAR = 260;
@@ -61,6 +62,15 @@ const VIEWMODEL_BOB_UP = 0.007;
 const VIEWMODEL_SWAY = 0.04;
 const VIEWMODEL_SWAY_MAX = 0.03;
 const VIEWMODEL_SWAY_RECOVERY_PER_SEC = 10;
+// Where a reload brings the weapon (client/reload.ts times it): a gun drops, comes in towards the
+// chest and rolls its magazine well up into view; the launcher is tipped forward off the shoulder.
+const VIEWMODEL_RELOAD_DROP = 0.06;
+const VIEWMODEL_RELOAD_BACK = 0.03;
+const VIEWMODEL_RELOAD_PITCH = 0.12;
+const VIEWMODEL_RELOAD_ROLL = 0.42;
+const VIEWMODEL_LAUNCHER_RELOAD_DROP = 0.05;
+const VIEWMODEL_LAUNCHER_RELOAD_PITCH = -0.3;
+const VIEWMODEL_LAUNCHER_RELOAD_ROLL = 0.15;
 
 export const scene = new Scene();
 export const camera = new PerspectiveCamera(FIELD_OF_VIEW_DEG, 1, NEAR_PLANE, FAR_PLANE);
@@ -73,14 +83,16 @@ const viewmodelCamera = new PerspectiveCamera(VIEWMODEL_FOV_DEG, 1, VIEWMODEL_NE
 viewmodelScene.add(viewmodelCamera);
 const viewmodel = new Group();
 viewmodelCamera.add(viewmodel);
-// One mesh and one muzzle point per weapon id (see WEAPON in shared/weapons.ts), all loaded up
-// front and swapped by visibility so switching weapons never touches the network or reloads assets.
+// One mesh, one muzzle point and one copy of the arms (posed for that grip) per weapon id (see
+// WEAPON in shared/weapons.ts), all loaded up front and swapped by visibility so switching weapons
+// never touches the network or reloads assets.
 const VIEW_WEAPON_NAMES = ["ViewRifle", "ViewSmg", "ViewBazooka"];
 const VIEW_MUZZLE_NAMES = ["MuzzleRifle", "MuzzleSmg", "MuzzleBazooka"];
+const VIEW_ARMS_NAMES = ["ArmsRifle", "ArmsSmg", "ArmsBazooka"];
 const viewWeapons: Object3D[] = [];
 const viewMuzzles: Object3D[] = [];
+const viewArms: Object3D[] = [];
 let currentWeapon = 0;
-let viewmodelTeamMaterial: MeshLambertMaterial | null = null;
 let viewmodelKick = 0;
 let bobPhase = 0;
 let swayX = 0;
@@ -95,9 +107,6 @@ const sky = new Mesh(
 );
 
 let renderer: WebGLRenderer | null = null;
-let grenadeTemplate: Object3D | null = null;
-const grenadeViews = new Map<number, Object3D>();
-const seenGrenades = new Set<number>();
 const litMaterial = new MeshLambertMaterial({ vertexColors: true });
 
 export function initRenderer(canvas: HTMLCanvasElement, assets: Assets): void {
@@ -124,24 +133,18 @@ export function initRenderer(canvas: HTMLCanvasElement, assets: Assets): void {
     if (weaponIndex !== -1) viewWeapons[weaponIndex] = object;
     const muzzleIndex = VIEW_MUZZLE_NAMES.indexOf(object.name);
     if (muzzleIndex !== -1) viewMuzzles[muzzleIndex] = object;
-    if (!(object instanceof Mesh)) return;
-    const source = object.material as Material;
-    if (source.name === "Team") {
-      viewmodelTeamMaterial = new MeshLambertMaterial({ vertexColors: true });
-      object.material = viewmodelTeamMaterial;
-    } else {
-      object.material = litMaterial;
-    }
-  });
-  for (let i = 0; i < viewWeapons.length; i++) {
-    const weapon = viewWeapons[i];
-    if (weapon) weapon.visible = i === currentWeapon;
-  }
-
-  grenadeTemplate = assets.grenade;
-  grenadeTemplate.traverse((object) => {
+    const armsIndex = VIEW_ARMS_NAMES.indexOf(object.name);
+    if (armsIndex !== -1) viewArms[armsIndex] = object;
     if (object instanceof Mesh) object.material = litMaterial;
   });
+  for (let i = 0; i < VIEW_WEAPON_NAMES.length; i++) showViewmodelWeapon(i, i === currentWeapon);
+}
+
+function showViewmodelWeapon(weapon: number, visible: boolean): void {
+  for (const parts of [viewWeapons, viewArms]) {
+    const part = parts[weapon];
+    if (part) part.visible = visible;
+  }
 }
 
 /** The first-person muzzle of the currently equipped weapon, for effects that attach to it. */
@@ -152,11 +155,9 @@ export function getViewmodelMuzzle(): Object3D {
 /** Shows the equipped weapon's mesh and hides the others. Safe to call every frame. */
 export function setViewmodelWeapon(weapon: number): void {
   if (weapon === currentWeapon) return;
-  const previous = viewWeapons[currentWeapon];
-  if (previous) previous.visible = false;
+  showViewmodelWeapon(currentWeapon, false);
   currentWeapon = weapon;
-  const next = viewWeapons[currentWeapon];
-  if (next) next.visible = true;
+  showViewmodelWeapon(currentWeapon, true);
 }
 
 function resize(): void {
@@ -231,10 +232,6 @@ function addMap(assets: Assets): void {
   scene.add(assets.map);
 }
 
-export function setViewmodelTeam(id: number): void {
-  viewmodelTeamMaterial?.color.setHex(teamColor(id));
-}
-
 export function setViewmodelVisible(visible: boolean): void {
   viewmodel.visible = visible;
 }
@@ -255,16 +252,27 @@ function syncViewmodelCamera(): void {
   viewmodelCamera.updateMatrixWorld();
 }
 
+/** The point in the world that sits on the drawn first-person muzzle, for bullets and rockets
+ * that should be seen leaving it. The arms are drawn through a narrower lens than the world, so
+ * the muzzle's own world position would land inward of it on screen; its sideways offsets from
+ * the eye are scaled by the ratio of the two lenses to compensate. */
 export function muzzleWorldPosition(out: Vector3): Vector3 {
   syncViewmodelCamera();
-  return getViewmodelMuzzle().getWorldPosition(out);
+  getViewmodelMuzzle().getWorldPosition(out);
+  viewmodelCamera.worldToLocal(out);
+  const match =
+    Math.tan((VIEWMODEL_FOV_DEG * Math.PI) / 360) / Math.tan((camera.fov * Math.PI) / 360);
+  out.x *= match;
+  out.y *= match;
+  return viewmodelCamera.localToWorld(out);
 }
 
-export function kickViewmodel(): void {
-  viewmodelKick = 1;
+/** `strength` is the weapon's recoil (shared/weapons.ts): 1 is the rifle's kick. */
+export function kickViewmodel(strength: number): void {
+  viewmodelKick = strength;
 }
 
-/** Recoil, walking bob and a little lag behind mouse movement. */
+/** Recoil, walking bob, a little lag behind mouse movement, and the reload's motion on top. */
 export function updateViewmodel(
   dt: number,
   distanceMoved: number,
@@ -272,6 +280,7 @@ export function updateViewmodel(
   yaw: number,
   pitch: number,
   ads: boolean,
+  reload: ReloadMotion,
 ): void {
   viewmodelKick *= Math.exp(-VIEWMODEL_RECOVERY_PER_SEC * dt);
   const moving = grounded && dt > 0 ? clamp(distanceMoved / dt / WALK_SPEED, 0, 1) : 0;
@@ -294,40 +303,22 @@ export function updateViewmodel(
   );
   lastYaw = yaw;
   lastPitch = pitch;
+  const launcher = weaponDefinition(currentWeapon).projectile !== null;
+  const lowered = reload.lower;
   viewmodel.position.set(
-    Math.cos(bobPhase) * VIEWMODEL_BOB_SIDE * moving + swayX,
-    -Math.abs(Math.sin(bobPhase)) * VIEWMODEL_BOB_UP * moving + swayY,
-    viewmodelKick * VIEWMODEL_RECOIL_BACK,
+    Math.cos(bobPhase) * VIEWMODEL_BOB_SIDE * moving + swayX + reload.x,
+    -Math.abs(Math.sin(bobPhase)) * VIEWMODEL_BOB_UP * moving +
+      swayY -
+      lowered * (launcher ? VIEWMODEL_LAUNCHER_RELOAD_DROP : VIEWMODEL_RELOAD_DROP) +
+      reload.y,
+    viewmodelKick * VIEWMODEL_RECOIL_BACK + lowered * VIEWMODEL_RELOAD_BACK + reload.z,
   );
-  viewmodel.rotation.x = viewmodelKick * VIEWMODEL_RECOIL_RISE;
-}
-
-export function updateGrenadeView(id: number, x: number, y: number, z: number): void {
-  let view = grenadeViews.get(id);
-  if (!view && grenadeTemplate) {
-    view = grenadeTemplate.clone();
-    scene.add(view);
-    grenadeViews.set(id, view);
-  }
-  view?.position.set(x, y, z);
-  seenGrenades.add(id);
-}
-
-/** Rockets reuse the lightweight projectile mesh but are smaller and visually distinct in motion. */
-export function updateRocketView(id: number, x: number, y: number, z: number): void {
-  updateGrenadeView(-id, x, y, z);
-  const view = grenadeViews.get(-id);
-  if (view) view.scale.setScalar(0.55);
-}
-
-/** Call once per frame after all updateGrenadeView calls. */
-export function removeUnseenGrenades(): void {
-  for (const [id, view] of grenadeViews) {
-    if (seenGrenades.has(id)) continue;
-    scene.remove(view);
-    grenadeViews.delete(id);
-  }
-  seenGrenades.clear();
+  viewmodel.rotation.x =
+    viewmodelKick * VIEWMODEL_RECOIL_RISE +
+    lowered * (launcher ? VIEWMODEL_LAUNCHER_RELOAD_PITCH : VIEWMODEL_RELOAD_PITCH) +
+    reload.pitch;
+  viewmodel.rotation.z =
+    lowered * (launcher ? VIEWMODEL_LAUNCHER_RELOAD_ROLL : VIEWMODEL_RELOAD_ROLL);
 }
 
 /** Compiles every shader and uploads every texture now, so nothing stutters the first time it

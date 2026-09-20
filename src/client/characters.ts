@@ -5,7 +5,6 @@ import {
   DataTexture,
   Group,
   InstancedMesh,
-  type Material,
   Matrix4,
   Mesh,
   MeshBasicMaterial,
@@ -21,13 +20,15 @@ import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
 import { MAX_PLAYERS, WALK_SPEED } from "../shared/constants.ts";
 import { clamp } from "../shared/math.ts";
 import type { Assets } from "./assets.ts";
+import type { ReloadMotion } from "./reload.ts";
 
-// Other players' soldiers. The legs play running clips blended by the direction of travel; the
+// Other players' characters. The legs play running clips blended by the direction of travel; the
 // upper body holds a rifle pose that pitches with the player's aim.
 
-const TEAM_COLORS = [
-  0xb8433b, 0x3b6fb8, 0x4e9a58, 0xc99a2e, 0x8250b8, 0x2e9e9e, 0xb85890, 0xa6a6a6,
-];
+/** character.glb carries two skins on one skeleton (see art/player.py): the King is you, the
+ * General is everyone else. */
+export type Look = "king" | "general";
+const LOOK_NODES: Record<Look, string> = { king: "King", general: "General" };
 /** Metres travelled in one loop of the running clips, so the feet don't slide. */
 const RUN_CYCLE_METRES = 4.6;
 const SPEED_SMOOTHING_PER_SEC = 12;
@@ -38,6 +39,10 @@ const MAX_FRAME_STEP = 1;
 const TORSO_PITCH_SHARE = 0.45;
 const RECOIL_PITCH = 0.14;
 const RECOIL_RECOVERY_PER_SEC = 10;
+// Reloading (client/reload.ts times it): the rifle dips and the support hand swings down off the
+// handguard to the magazine and back.
+const RELOAD_LOWER_PITCH = 0.3;
+const RELOAD_HAND_SWING = 0.8;
 const SHADOW_SIZE = 1.1;
 const SHADOW_OPACITY = 0.55;
 const SHADOW_LIFT = 0.02;
@@ -48,7 +53,7 @@ export type CharacterModel = {
   model: Object3D;
   /** The skeleton's bones, in the same order for every model. */
   bones: Object3D[];
-  teamMaterial: MeshLambertMaterial;
+  look: Look;
 };
 
 export type PlayerView = CharacterModel & {
@@ -67,6 +72,10 @@ export type PlayerView = CharacterModel & {
   chestAim: Quaternion;
   torsoAxis: Vector3;
   chestAxis: Vector3;
+  /** The left upper arm, swung off the rifle while reloading. */
+  arm: Object3D;
+  armAim: Quaternion;
+  armAxis: Vector3;
   muzzle: Object3D;
   shadowSlot: number;
   runPhase: number;
@@ -107,8 +116,11 @@ const tmpScale = new Vector3();
 const identity = new Quaternion();
 const rightAxis = new Vector3(1, 0, 0);
 
-export function teamColor(id: number): number {
-  return TEAM_COLORS[id % TEAM_COLORS.length] ?? 0xffffff;
+let selfId = -1;
+
+/** Which player is drawn as the King. Set before that player's view is created. */
+export function setSelfId(id: number): void {
+  selfId = id;
 }
 
 function findClip(all: AnimationClip[], name: string): AnimationClip {
@@ -184,20 +196,27 @@ export function initCharacters(assets: Assets, targetScene: Scene, probe: Ground
   targetScene.add(shadows);
 }
 
-/** A soldier with this player's colours, not yet added to any scene. */
-export function createCharacterModel(id: number): CharacterModel {
+/** A character wearing `look`, not yet added to any scene. */
+export function createCharacterModel(look: Look): CharacterModel {
   if (!template) throw new Error("initCharacters must run first");
   const model = cloneSkinned(template);
-  const teamMaterial = new MeshLambertMaterial({ vertexColors: true, color: teamColor(id) });
   let bones: Object3D[] = [];
   model.traverse((object) => {
     if (!(object instanceof Mesh)) return;
-    // Material names come from art/player.py: "Team" is the uniform, tinted per player.
-    const source = object.material as Material;
-    object.material = source.name === "Team" ? teamMaterial : bodyMaterial;
+    object.material = bodyMaterial;
+    // Both skins share the skeleton, so either one's bones drive the whole character.
     if (object instanceof SkinnedMesh) bones = object.skeleton.bones;
   });
-  return { model, bones, teamMaterial };
+  const character = { model, bones, look };
+  setLook(character, look);
+  return character;
+}
+
+export function setLook(character: CharacterModel, look: Look): void {
+  character.look = look;
+  for (const [name, node] of Object.entries(LOOK_NODES)) {
+    findObject(character.model, node).visible = name === look;
+  }
 }
 
 /** The axis, in a bone's own space, that points to the character's right in the aim pose.
@@ -209,7 +228,7 @@ function pitchAxis(bone: Object3D): Vector3 {
 
 function createPlayerView(id: number): PlayerView {
   if (!scene || !clips || !shadows) throw new Error("initCharacters must run first");
-  const character = createCharacterModel(id);
+  const character = createCharacterModel(id === selfId ? "king" : "general");
   const root = new Group();
   root.add(character.model);
   scene.add(root);
@@ -239,6 +258,9 @@ function createPlayerView(id: number): PlayerView {
     chestAim: new Quaternion(),
     torsoAxis: new Vector3(),
     chestAxis: new Vector3(),
+    arm: findObject(character.model, "UpperArmL"),
+    armAim: new Quaternion(),
+    armAxis: new Vector3(),
     muzzle: findObject(character.model, "Muzzle"),
     shadowSlot: shadowSlotsUsed.indexOf(false),
     runPhase: 0,
@@ -254,9 +276,11 @@ function createPlayerView(id: number): PlayerView {
   mixer.update(0);
   view.torsoAim.copy(view.torso.quaternion);
   view.chestAim.copy(view.chest.quaternion);
+  view.armAim.copy(view.arm.quaternion);
   root.updateMatrixWorld(true);
   view.torsoAxis.copy(pitchAxis(view.torso));
   view.chestAxis.copy(pitchAxis(view.chest));
+  view.armAxis.copy(pitchAxis(view.arm));
   return view;
 }
 
@@ -272,6 +296,7 @@ export function updatePlayerView(
   yaw: number,
   pitch: number,
   visible: boolean,
+  reload: ReloadMotion,
   dt: number,
 ): void {
   let view = playerViews.get(id);
@@ -307,7 +332,7 @@ export function updatePlayerView(
     if (!airborne) view.runPhase = (view.runPhase + step / RUN_CYCLE_METRES) % 1;
   }
   animate(view, dt);
-  pose(view, pitch, dt);
+  pose(view, pitch, reload, dt);
   placeShadow(view, x, y, z, visible);
 }
 
@@ -325,20 +350,26 @@ function animate(view: PlayerView, dt: number): void {
   view.mixer.update(dt);
 }
 
-/** Aim pitch and recoil, applied on top of the animation's upper-body pose. */
-function pose(view: PlayerView, pitch: number, dt: number): void {
+/** Aim pitch, recoil and the reload, applied on top of the animation's upper-body pose. */
+function pose(view: PlayerView, pitch: number, reload: ReloadMotion, dt: number): void {
   view.recoil *= Math.exp(-RECOIL_RECOVERY_PER_SEC * dt);
   // The mixer only writes a bone when its clip value changes, and the aim pose never does, so
   // without this reset each frame's rotation would stack on the last and spin the upper body.
   view.torso.quaternion.copy(view.torsoAim);
   view.chest.quaternion.copy(view.chestAim);
+  view.arm.quaternion.copy(view.armAim);
   tmpQuaternion.setFromAxisAngle(view.torsoAxis, pitch * TORSO_PITCH_SHARE);
   view.torso.quaternion.multiply(tmpQuaternion);
   tmpQuaternion.setFromAxisAngle(
     view.chestAxis,
-    pitch * (1 - TORSO_PITCH_SHARE) + view.recoil * RECOIL_PITCH,
+    pitch * (1 - TORSO_PITCH_SHARE) +
+      view.recoil * RECOIL_PITCH -
+      reload.lower * RELOAD_LOWER_PITCH +
+      reload.pitch,
   );
   view.chest.quaternion.multiply(tmpQuaternion);
+  tmpQuaternion.setFromAxisAngle(view.armAxis, -reload.hand * RELOAD_HAND_SWING);
+  view.arm.quaternion.multiply(tmpQuaternion);
 }
 
 function placeShadow(view: PlayerView, x: number, y: number, z: number, visible: boolean): void {
@@ -370,7 +401,6 @@ export function removePlayerViewsExcept(keep: ReadonlySet<number>): void {
     scene?.remove(view.root);
     view.mixer.stopAllAction();
     view.mixer.uncacheRoot(view.model);
-    view.teamMaterial.dispose();
     if (view.shadowSlot >= 0) {
       shadowSlotsUsed[view.shadowSlot] = false;
       shadows?.setMatrixAt(view.shadowSlot, tmpMatrix.makeScale(0, 0, 0));

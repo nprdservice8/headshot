@@ -61,6 +61,16 @@ test("walks forward at walk speed", () => {
   assert.ok(Math.abs(state.x) < 0.01);
 });
 
+test("a heavy weapon slows walking by its multiplier", () => {
+  const light = createMoveState(0, 1, 0);
+  const heavy = createMoveState(0, 1, 0);
+  for (let i = 0; i < TICK_RATE; i++) {
+    stepMovement(mover, light, BUTTON.FORWARD, 0, false, 1);
+    stepMovement(mover, heavy, BUTTON.FORWARD, 0, false, 0.75);
+  }
+  assert.ok(Math.abs(heavy.vz / light.vz - 0.75) < 0.01, `ratio ${heavy.vz / light.vz}`);
+});
+
 test("sprinting increases predicted speed deterministically", () => {
   const state = createMoveState(0, 0, 0);
   run(state, 0, 10);

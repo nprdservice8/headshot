@@ -14,6 +14,7 @@ import { decodeClientMessage, encodeMessage, type ServerMessage } from "../share
 import {
   addPlayer,
   createMatch,
+  lobbyStatus,
   queueInput,
   removePlayer,
   tickMatch,
@@ -28,6 +29,7 @@ const TICK_BUDGET_MS = 2;
 const TICK_STATS_INTERVAL_MS = 30_000;
 const MAX_TICK_CATCH_UP_MS = 1000;
 const CLOSE_POLICY_VIOLATION = 1008;
+const LOBBY_STATUS_PATH = "/api/lobby";
 const CLOSE_INTERNAL_ERROR = 1011;
 const CLOSE_MATCH_FULL = 4001;
 
@@ -132,6 +134,12 @@ function handleMessage(client: Client, data: RawData, isBinary: boolean): void {
 const httpServer = createServer((request, response) => {
   if (request.method !== "GET" && request.method !== "HEAD") {
     response.writeHead(405).end();
+    return;
+  }
+  if (request.url === LOBBY_STATUS_PATH) {
+    const body = JSON.stringify(lobbyStatus(match));
+    response.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    response.end(request.method === "HEAD" ? undefined : body);
     return;
   }
   const filePath = resolveStaticPath(request.url ?? "/", PUBLIC_DIR, DIST_DIR);

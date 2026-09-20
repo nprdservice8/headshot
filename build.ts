@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { type BuildOptions, build, context } from "esbuild";
@@ -28,6 +28,14 @@ const options: BuildOptions = {
 
 const kb = (bytes: number) => `${(bytes / 1024).toFixed(0)} KB`;
 
+/** Every file under the assets folder, including the sounds subfolder. */
+function assetFiles(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name);
+    return statSync(path).isDirectory() ? assetFiles(path) : [path];
+  });
+}
+
 /** Size on the wire: gzipped, as a server or CDN would send it. */
 function downloadSize(path: string): number {
   const size = gzipSync(readFileSync(path), { level: 9 }).length;
@@ -43,7 +51,7 @@ if (dev) {
 } else {
   await build(options);
   let total = downloadSize(GAME_OUTFILE);
-  for (const name of readdirSync(ASSETS_DIR)) total += downloadSize(join(ASSETS_DIR, name));
+  for (const path of assetFiles(ASSETS_DIR)) total += downloadSize(path);
   console.log(`Download before playing: ${kb(total)} of ${kb(LOAD_BUDGET_BYTES)}`);
   if (total > LOAD_BUDGET_BYTES) {
     console.error("Over the load budget");

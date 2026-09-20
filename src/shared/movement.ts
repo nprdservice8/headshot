@@ -154,12 +154,14 @@ function resolvePenetration(mover: Mover, state: MoveState): void {
 }
 
 /** Advances one player by exactly one tick. The server and the predicting client both run this. */
+/** `speedMultiplier` is the equipped weapon's (see shared/weapons.ts); a heavy weapon slows. */
 export function stepMovement(
   mover: Mover,
   state: MoveState,
   buttons: number,
   yaw: number,
   wantsSprint = false,
+  speedMultiplier = 1,
 ): void {
   // Exhausted sprinters must fully recover before sprinting again, so stamina near zero never
   // flickers between sprint and walk speed from one tick's regen alone.
@@ -193,7 +195,7 @@ export function stepMovement(
   // In the air, letting go of the keys keeps momentum so knockback and jumps carry.
   if (state.grounded || wishLength > 0) {
     const blend = Math.min(1, (state.grounded ? GROUND_ACCEL : AIR_ACCEL) * TICK_SEC);
-    const speed = sprinting ? SPRINT_SPEED : WALK_SPEED;
+    const speed = (sprinting ? SPRINT_SPEED : WALK_SPEED) * speedMultiplier;
     state.vx += (wishX * speed - state.vx) * blend;
     state.vz += (wishZ * speed - state.vz) * blend;
   }

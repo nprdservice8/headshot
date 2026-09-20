@@ -13,6 +13,7 @@ from arena import (
     rng_for, stacked,
 )
 from mesh import VERTEX_LIT, Frame, block, facing, grid, linear, lit, polygon, rect, turned, wall_rect
+from signs import lettering, shop_name, wall_word
 
 STOREY = 3.0
 BAY = 2.7
@@ -21,6 +22,17 @@ FLAGSTONE = 1.5
 CAP = 0.14
 RISER = 0.22
 SURFACES = {"paving": BRICK_PAVING, "asphalt": ASPHALT, "dirt": DIRT, "flagstones": STONE_LIGHT}
+SIGN_INKS = (0xf4efe2, 0xffd84a)
+# Lettering is the map's most expensive detail, so only some boards are named (the rest are
+# painted plain), few signs hang out from the wall, and slogans are rare.
+LETTERED_SIGNS = 0.22
+HANGING_SIGNS = 0.04
+WALL_WORDS = 0.05
+INK_DARK = 0x1a1410
+AWNINGS = ((0xb8302c, 0xe8e2d0), (0x2c5aa0, 0xe8e2d0), (0x2f7a4a, 0x2f7a4a), (0xe39a2c, 0xe39a2c), (0xb8302c, 0xb8302c))
+AWNING_REACH = 0.7
+AWNING_DROP = 0.3
+PAINTS = (0xb8302c, 0x2c5aa0, 0x1a1410, 0x2f7a4a)
 
 
 def sides_of(box):
@@ -129,8 +141,54 @@ def road_markings(frame):
 # Houses -----------------------------------------------------------------------------------------
 
 
+def sign_colors(rng):
+    """A board colour and lettering that reads against it: dark ink on light boards."""
+    board = rng.choice(SIGNS)
+    r, g, b = ((board >> shift) & 255 for shift in (16, 8, 0))
+    light = 0.299 * r + 0.587 * g + 0.114 * b > 150
+    return board, INK_DARK if light else rng.choice(SIGN_INKS)
+
+
+def awning(frame, mid, half, y0, rng):
+    """A striped cloth awning sloping out over the shop, with a valance hanging off its edge.
+    It reaches past the collision box, but only above head height."""
+    top = y0 + 2.35
+    low = top - AWNING_DROP
+    colors = rng.choice(AWNINGS)
+    stripes = 4
+    width = 2 * half / stripes
+    for k in range(stripes):
+        x0 = mid - half + k * width
+        x1 = x0 + width
+        color = linear(colors[k % 2], 0.08, rng)
+        polygon(frame, ((x0, low, AWNING_REACH), (x1, low, AWNING_REACH), (x1, top, 0.02), (x0, top, 0.02)), color)
+        polygon(frame, ((x0, low - 0.18, AWNING_REACH), (x1, low - 0.18, AWNING_REACH), (x1, low, AWNING_REACH), (x0, low, AWNING_REACH)), color)
+
+
+def side_frame(frame, x, direction):
+    """A frame at `x` along a wall whose front looks along the wall (`direction` +1 or -1), for
+    signs that stick out from the wall."""
+    return Frame(frame.center + frame.rotation @ Vector((x, 0, 0)), frame.rotation @ Quaternion((0, 1, 0), direction * math.pi / 2))
+
+
+def hanging_sign(frame, x, y0, rng):
+    """A small board sticking out from the wall, lettered on both sides."""
+    board, ink = sign_colors(rng)
+    inner, outer = 0.05, 0.65
+    bottom, top = y0 + 2.0, y0 + 2.42
+    name = shop_name(rng)
+    paint = linear(board, 0.1, rng)
+    polygon(frame, ((x, bottom, outer), (x, bottom, inner), (x, top, inner), (x, top, outer)), paint)
+    polygon(frame, ((x, bottom, inner), (x, bottom, outer), (x, top, outer), (x, top, inner)), paint)
+    # Each side's frame runs its x along the board, so the lettering is centred halfway out.
+    for direction in (1, -1):
+        lettering(side_frame(frame, x, direction), name, -direction * (inner + outer) / 2, bottom + 0.09, 0.24, linear(ink), 0.012, outer - inner - 0.08)
+    wall_rect(frame, x - 0.02, x + 0.02, top - 0.05, top + 0.25, linear(0x3a3d40), lift=0.03)
+
+
 def shopfront(frame, mid, width, y0, rng):
-    """Ground floors are shops: a rolled-down shutter or a dark doorway, a painted sign above."""
+    """Ground floors are shops: a rolled-down shutter or a dark doorway, a named signboard
+    above, an awning or a hanging sign for some."""
     half = min(width - 0.6, 2.3) / 2
     if rng.random() < 0.7:
         shade = rng.choice(SHUTTERS)
@@ -140,8 +198,16 @@ def shopfront(frame, mid, width, y0, rng):
             wall_rect(frame, mid - half, mid + half, y - 0.025, y + 0.025, linear(0x3a3d40), lift=0.03)
     else:
         wall_rect(frame, mid - 0.55, mid + 0.55, y0, y0 + 2.1, linear(WOOD_DARK, 0.1, rng), lift=0.02)
-    if rng.random() < 0.65:
-        wall_rect(frame, mid - half, mid + half, y0 + 2.4, y0 + 2.85, linear(rng.choice(SIGNS), 0.1, rng), lift=0.06)
+    if rng.random() < 0.8:
+        board, ink = sign_colors(rng)
+        wall_rect(frame, mid - half, mid + half, y0 + 2.4, y0 + 2.9, linear(board, 0.1, rng), lift=0.06)
+        if rng.random() < LETTERED_SIGNS:
+            lettering(frame, shop_name(rng), mid, y0 + 2.49, 0.3, linear(ink), 0.075, 2 * half - 0.25)
+    roll = rng.random()
+    if roll < 0.4:
+        awning(frame, mid, half, y0, rng)
+    elif roll < 0.4 + HANGING_SIGNS:
+        hanging_sign(frame, mid + half + 0.12, y0, rng)
 
 
 def window(frame, mid, y0, y1, plastered, rng):
@@ -186,6 +252,8 @@ def dress_house(box):
                         window(frame, mid, y0, y1, plastered, rng)
                 if s > 0 and not plastered:
                     wall_rect(frame, -half, half, y0 - 0.08, y0 + 0.1, linear(WOOD, 0.1, rng), lift=0.04)
+                if s > 0 and half > 2 and rng.random() < WALL_WORDS:
+                    lettering(frame, wall_word(rng), rng.uniform(-half + 1.4, half - 1.4), y0 + rng.uniform(0.5, 1.3), 0.34, linear(rng.choice(PAINTS), 0.1, rng), 0.015, 2.6)
                 if s < 2 and rng.random() < 0.35:
                     scorch(frame, rng.uniform(-half + 1, half - 1), rng.uniform(y0 + 0.8, y1 - 0.3), rng.uniform(0.6, 1.4), rng)
                 if s == 0 and rng.random() < 0.6:

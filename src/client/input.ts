@@ -1,6 +1,7 @@
 import { MAX_PITCH, MOUSE_SENSITIVITY } from "../shared/constants.ts";
 import { clamp, wrapAngle } from "../shared/math.ts";
 import { BUTTON } from "../shared/protocol.ts";
+import { loadLoadout } from "./stats.ts";
 
 const KEY_BUTTONS: Readonly<Record<string, number>> = {
   KeyW: BUTTON.FORWARD,
@@ -25,7 +26,8 @@ let heldButtons = 0;
 // Buttons pressed since the last tick, so a tap shorter than one tick still registers.
 let tappedButtons = 0;
 let scoreboardHeld = false;
-let selectedWeapon = 0;
+let mapOpen = false;
+let selectedWeapon: number = loadLoadout();
 
 export function isPointerLocked(): boolean {
   return document.pointerLockElement !== null;
@@ -63,6 +65,10 @@ export function initInput(canvas: HTMLCanvasElement, canPlay: () => boolean): vo
     if (event.code === "Tab") {
       event.preventDefault();
       scoreboardHeld = true;
+      return;
+    }
+    if (event.code === "KeyM" && isPointerLocked() && !event.repeat) {
+      mapOpen = !mapOpen;
       return;
     }
     if (isPointerLocked() && event.code >= "Digit1" && event.code <= "Digit3") {
@@ -121,4 +127,9 @@ export function currentWeapon(): number {
 
 export function isScoreboardHeld(): boolean {
   return scoreboardHeld;
+}
+
+/** The full map overlay, toggled with M. */
+export function isMapOpen(): boolean {
+  return mapOpen;
 }

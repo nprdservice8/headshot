@@ -1,15 +1,15 @@
-"""Dressing for the clutter of war: sandbags, crates, containers, burnt-out vehicles and tents.
-All of it is vertex-lit. Kit models (CC0, Quaternius: Toon Shooter Game Kit) are stretched to fit
-their collision boxes exactly."""
+"""Dressing for the clutter of war: sandbags, crates, containers, vehicles and tents. All of it is
+vertex-lit. Kit models (CC0: Quaternius' Toon Shooter Game Kit, Kenney's Car Kit) are stretched
+to fit their collision boxes exactly."""
 
 import math
 
 import bpy
-from mathutils import Matrix, Quaternion, Vector
+from mathutils import Matrix, Vector
 
-from arena import BURLAP, CHARCOAL, OLIVE, OLIVE_DARK, RUST, SOOT, box_frame, half_of, rng_for
-from common import bounds, flatten_materials, import_gltf
-from mesh import VERTEX_LIT, Frame, block, cylinder, game_to_blender, linear, lit, polygon, rect
+from arena import BURLAP, OLIVE, OLIVE_DARK, RUST, SOOT, box_frame, half_of, rng_for
+from common import apply_transform, bounds, flatten_materials, import_gltf, join
+from mesh import VERTEX_LIT, game_to_blender, linear, lit, polygon, rect
 
 BAG_LENGTH = 0.6
 BAG_HEIGHT = 0.2
@@ -19,15 +19,40 @@ props = []
 
 
 def template(name):
+    """A kit model, loaded once: its meshes joined into one, its colours baked into vertex
+    colours (`name` may carry a folder and extension, else it is a .gltf in art/source)."""
     found = prop_templates.get(name)
     if found is None:
-        found = import_gltf(name + ".gltf")[0]
+        objects = import_gltf(name if "." in name else name + ".gltf")
+        meshes = [o for o in objects if o.type == "MESH"]
+        for obj in objects:
+            if obj.type != "MESH":
+                bpy.data.objects.remove(obj)
+        for obj in meshes:
+            obj.parent = None
+        found = join(meshes) if len(meshes) > 1 else meshes[0]
+        apply_transform(found)
+        flatten_materials(found, group_of=lambda _: "Map")
+        decimate(found)
         for uv in list(found.data.uv_layers):
             found.data.uv_layers.remove(uv)
-        flatten_materials(found, group_of=lambda _: "Map")
         bpy.context.scene.collection.objects.unlink(found)
         prop_templates[name] = found
     return found
+
+
+# Kit vehicles arrive with thousands of vertices in their wheels and trim; this keeps their shape.
+DECIMATE_ABOVE = 1500
+DECIMATE_RATIO = 0.35
+
+
+def decimate(obj):
+    if len(obj.data.vertices) < DECIMATE_ABOVE:
+        return
+    modifier = obj.modifiers.new("Decimate", "DECIMATE")
+    modifier.ratio = DECIMATE_RATIO
+    with bpy.context.temp_override(object=obj, active_object=obj, selected_editable_objects=[obj]):
+        bpy.ops.object.modifier_apply(modifier=modifier.name)
 
 
 def place(name, matrix):
@@ -91,54 +116,55 @@ def dress_sandbags(box):
                 rect(frame, (x, hy, z), (0, 0, hz / lengthwise), (hx / across, 0, 0), linear(BURLAP, 0.12, rng))
 
 
-def wheel(frame, x, y, z, radius, width, color):
-    """A wheel on an axle along local x."""
-    hub = Frame(frame.center + frame.rotation @ Vector((x, y, z)), frame.rotation @ Quaternion((0, 0, 1), math.pi / 2))
-    cylinder(hub, (0, -width / 2, 0), radius, width, 10, color)
-    polygon(hub, [(math.cos(2 * math.pi * k / 10) * radius, -width / 2, math.sin(2 * math.pi * k / 10) * radius) for k in range(10)], color)
+# Kathmandu's traffic: white Maruti taxis, blue and green microbuses, Tata lorries painted
+# green, blue or red. Most of it was caught in the fighting.
+CAR_MODELS = ("carkit/sedan.glb", "carkit/hatchback-sports.glb", "carkit/suv.glb", "carkit/taxi.glb", "carkit/van.glb")
+CAR_PAINTS = (0xe8e4d8, 0xe8e4d8, 0x2c5aa0, 0x2f7a4a, 0xc9a227, 0x8a2a2a, 0x6d7479)
+TRUCK_MODELS = ("carkit/truck.glb", "carkit/delivery.glb")
+TRUCK_PAINTS = (0x2f7a4a, 0x2c5aa0, 0xb8302c, 0xd07a2a)
+WRECK = "Debris_BrokenCar"
+BURNT_OUT_CHANCE = 0.55
 
 
-def burnt(rng, paint):
-    """Burnt-out paintwork: mostly soot and rust, with some of the old colour left."""
-    roll = rng.random()
-    return linear(SOOT if roll < 0.45 else RUST if roll < 0.75 else paint, 0.15, rng)
+def is_paintwork(color):
+    """Whether a kit colour is bodywork rather than glass, tyres, chrome or lights: the body is
+    the saturated colour; everything else on these kits is grey or black."""
+    r, g, b, _ = color
+    return max(r, g, b) - min(r, g, b) > 0.06 and max(r, g, b) > 0.08
+
+
+def repaint(obj, rng, paint, burnt_out):
+    """Gives a fitted vehicle its own paint, keeping the kit's light and dark panels apart, then
+    scorches and rusts it if it burnt out."""
+    colors = obj.data.color_attributes["Color"].data
+    paint = linear(paint, 0.12, rng)
+    body = [c.color for c in colors if is_paintwork(c.color)]
+    reference = max((max(c[:3]) for c in body), default=1.0)
+    for face in obj.data.polygons:
+        roll = rng.random()
+        for index in face.loop_indices:
+            color = colors[index].color
+            if is_paintwork(color):
+                shade = max(color[:3]) / reference
+                color = (paint[0] * shade, paint[1] * shade, paint[2] * shade, 1.0)
+            if burnt_out and roll < 0.55:
+                color = linear(SOOT if roll < 0.3 else RUST, 0.15, rng)
+            colors[index].color = color
 
 
 def dress_truck(box):
-    """A burnt-out cab-over lorry with a canvas tilt over its load bed. Front is local +z."""
     rng = rng_for(box)
-    frame = box_frame(box)
-    hx, hy, hz = half_of(box)
-    floor = -hy
-    paint = rng.choice((OLIVE, 0xd07a2a, 0x3d6db0))
-    with lit(VERTEX_LIT):
-        for z in (hz - 1.1, -hz + 2.3, -hz + 1.0):
-            for side in (-1, 1):
-                wheel(frame, side * (hx - 0.2), floor + 0.5, z, 0.5, 0.36, linear(0x3a3a3a, 0.1, rng))
-        block(frame, (0, floor + 0.8, 0), (hx - 0.25, 0.25, hz - 0.1), linear(CHARCOAL, 0.1, rng))
-        block(frame, (0, floor + 1.8, hz - 1.0), (hx, 0.85, 1.0), burnt(rng, paint))
-        for side in (-1, 1):
-            rect(frame, (side * (hx + 0.01), floor + 2.1, hz - 0.8), (0, 0, -side * 0.5), (0, 0.35, 0), linear(SOOT, 0.1, rng))
-        rect(frame, (0, floor + 2.1, hz + 0.01), (hx - 0.2, 0, 0), (0, 0.4, 0), linear(SOOT, 0.1, rng))
-        block(frame, (0, floor + 1.55, -1.0), (hx, 0.5, hz - 2.0), burnt(rng, paint))
-        block(frame, (0, floor + 2.6, -1.05), (hx, 0.5, hz - 2.05), linear(OLIVE_DARK if rng.random() < 0.6 else SOOT, 0.1, rng))
+    obj = fit(rng.choice(TRUCK_MODELS), box)
+    repaint(obj, rng, rng.choice(TRUCK_PAINTS), rng.random() < BURNT_OUT_CHANCE)
 
 
 def dress_car(box):
-    """A burnt-out taxi. Front is local +z."""
     rng = rng_for(box)
-    frame = box_frame(box)
-    hx, hy, hz = half_of(box)
-    floor = -hy
-    paint = rng.choice((0xe8e4d8, 0x2f7a4a, 0xc9a227))
-    with lit(VERTEX_LIT):
-        for z in (hz - 0.6, -hz + 0.6):
-            for side in (-1, 1):
-                wheel(frame, side * (hx - 0.12), floor + 0.32, z, 0.32, 0.22, linear(0x333333, 0.1, rng))
-        block(frame, (0, floor + 0.62, 0), (hx, 0.32, hz), burnt(rng, paint))
-        block(frame, (0, floor + 1.26, -0.2), (hx - 0.08, 0.32, hz * 0.55), burnt(rng, paint))
-        for side in (-1, 1):
-            rect(frame, (side * (hx - 0.07), floor + 1.28, -0.2), (0, 0, -side * hz * 0.5), (0, 0.22, 0), linear(SOOT, 0.1, rng))
+    if rng.random() < 0.3:
+        fit(WRECK, box)
+        return
+    obj = fit(rng.choice(CAR_MODELS), box)
+    repaint(obj, rng, rng.choice(CAR_PAINTS), rng.random() < BURNT_OUT_CHANCE)
 
 
 def dress_tent(box):

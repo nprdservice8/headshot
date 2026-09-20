@@ -24,6 +24,7 @@ import {
   type ShotMessage,
   type SnapshotMessage,
 } from "../shared/protocol.ts";
+import { weaponDefinition } from "../shared/weapons.ts";
 
 export type NetHandlers = {
   onWelcome(): void;
@@ -43,8 +44,8 @@ export const self = {
   alive: false,
   hp: 0,
   grenades: 0,
-  rockets: 0,
   ammo: 0,
+  reserve: 0,
   reloading: false,
   weapon: 0,
   ads: false,
@@ -67,6 +68,8 @@ const pendingSeq = new Int32Array(MAX_PENDING_INPUTS);
 const pendingButtons = new Uint8Array(MAX_PENDING_INPUTS);
 const pendingYaw = new Float64Array(MAX_PENDING_INPUTS);
 const pendingSprint = new Uint8Array(MAX_PENDING_INPUTS);
+/** The weapon held for each pending input: it sets the movement speed, so replays need it. */
+const pendingWeapon = new Uint8Array(MAX_PENDING_INPUTS);
 let pendingStart = 0;
 let pendingCount = 0;
 
@@ -173,7 +176,7 @@ function reconcile(snapshot: SnapshotMessage): void {
   self.alive = you.alive;
   self.hp = you.hp;
   self.grenades = you.grenades;
-  self.rockets = you.rockets;
+  self.reserve = you.reserve;
   self.ammo = you.ammo;
   self.reloading = you.reloading;
   self.weapon = you.weapon;
@@ -202,6 +205,7 @@ function reconcile(snapshot: SnapshotMessage): void {
         pendingButtons[index] ?? 0,
         pendingYaw[index] ?? 0,
         pendingSprint[index] === 1,
+        weaponDefinition(pendingWeapon[index] ?? 0).movementMultiplier,
       );
     }
   } else {
@@ -260,6 +264,7 @@ export function sendInputAndPredict(
     buttons,
     yaw,
     (buttons & BUTTON.SPRINT) !== 0 && (buttons & BUTTON.ADS) === 0,
+    weaponDefinition(weapon).movementMultiplier,
   );
   if (pendingCount === MAX_PENDING_INPUTS) {
     pendingStart = (pendingStart + 1) % MAX_PENDING_INPUTS;
@@ -270,6 +275,7 @@ export function sendInputAndPredict(
   pendingButtons[index] = buttons;
   pendingYaw[index] = yaw;
   pendingSprint[index] = (buttons & BUTTON.SPRINT) !== 0 && (buttons & BUTTON.ADS) === 0 ? 1 : 0;
+  pendingWeapon[index] = weapon;
   pendingCount++;
 }
 
@@ -322,9 +328,12 @@ export type PlayerVisitor = (
   yaw: number,
   pitch: number,
   alive: boolean,
+  weapon: number,
+  reloading: boolean,
 ) => void;
 
-/** Calls `visit` for every other player, blended between snapshots at the render tick. */
+/** Calls `visit` for every other player, blended between snapshots at the render tick. Weapon
+ * and reload flag come from the newer snapshot, which is as close as the drawn moment gets. */
 export function forEachOtherPlayer(tick: number, visit: PlayerVisitor): void {
   if (!bracket(tick) || !older || !newer) return;
   for (const to of newer.players) {
@@ -332,7 +341,17 @@ export function forEachOtherPlayer(tick: number, visit: PlayerVisitor): void {
     const from = findById(older.players, to.id);
     // Only blend while alive in both, so a respawn doesn't slide across the map.
     if (!from?.alive || !to.alive) {
-      visit(to.id, to.x, to.y, to.z, to.yaw, to.pitch, to.alive && (from?.alive ?? true));
+      visit(
+        to.id,
+        to.x,
+        to.y,
+        to.z,
+        to.yaw,
+        to.pitch,
+        to.alive && (from?.alive ?? true),
+        to.weapon,
+        to.reloading,
+      );
       continue;
     }
     visit(
@@ -343,6 +362,8 @@ export function forEachOtherPlayer(tick: number, visit: PlayerVisitor): void {
       lerpAngle(from.yaw, to.yaw, blend),
       lerp(from.pitch, to.pitch, blend),
       true,
+      to.weapon,
+      to.reloading,
     );
   }
 }
@@ -358,13 +379,30 @@ export function forEachGrenade(
   }
 }
 
-export function forEachRocket(
-  tick: number,
-  visit: (id: number, x: number, y: number, z: number) => void,
-): void {
+export type RocketVisitor = (
+  id: number,
+  ownerId: number,
+  x: number,
+  y: number,
+  z: number,
+  dx: number,
+  dy: number,
+  dz: number,
+) => void;
+
+export function forEachRocket(tick: number, visit: RocketVisitor): void {
   if (!bracket(tick) || !older || !newer) return;
   for (const to of newer.rockets) {
     const from = findById(older.rockets, to.id) ?? to;
-    visit(to.id, lerp(from.x, to.x, blend), lerp(from.y, to.y, blend), lerp(from.z, to.z, blend));
+    visit(
+      to.id,
+      to.ownerId,
+      lerp(from.x, to.x, blend),
+      lerp(from.y, to.y, blend),
+      lerp(from.z, to.z, blend),
+      to.dx,
+      to.dy,
+      to.dz,
+    );
   }
 }

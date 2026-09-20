@@ -56,151 +56,99 @@
       display: none !important;
     }
 
-    /* Main Menu Overlay */
+    /* Login page: a hero about the game beside the account card. */
     #menu {
       position: fixed;
       inset: 0;
       display: grid;
-      place-content: center;
+      place-items: center;
       padding: 16px;
-      gap: 20px;
-      text-align: center;
-      background: radial-gradient(circle at 50% 40%, rgba(15, 23, 42, 0.85), rgba(4, 7, 13, 0.98));
-      backdrop-filter: blur(20px);
       z-index: 100;
       overflow-y: auto;
+      background: radial-gradient(circle at 12% 8%, rgba(23, 46, 64, 0.9), transparent 34%),
+        radial-gradient(circle at 92% 92%, rgba(59, 36, 18, 0.85), transparent 30%),
+        linear-gradient(180deg, rgba(4, 7, 13, 0.92), rgba(4, 7, 13, 0.98));
+      backdrop-filter: blur(20px);
+    }
+
+    #menu::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.22;
+      background-image: linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+      background-size: 42px 42px;
+      mask-image: linear-gradient(to bottom, black, transparent);
     }
 
     .menu-card {
-      background: var(--panel);
-      border: 1px solid var(--panel-border);
-      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), inset 0 0 40px var(--panel-glow);
-      border-radius: 24px;
-      padding: clamp(24px, 5vh, 40px) clamp(24px, 5vw, 44px);
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(300px, 1.15fr) minmax(320px, 400px);
+      width: min(1040px, 96vw);
+      max-height: calc(100vh - 32px);
+      overflow: hidden;
+      border: 1px solid rgba(178, 223, 255, 0.16);
+      border-radius: 26px;
+      background: rgba(8, 13, 22, 0.9);
+      box-shadow: 0 34px 110px rgba(0, 0, 0, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.07), inset 0 0 90px rgba(0, 240, 255, 0.05);
+    }
+
+    .menu-hero {
+      position: relative;
       display: flex;
       flex-direction: column;
-      gap: 20px;
-      width: min(680px, 94vw);
-      max-height: calc(100vh - 32px);
+      justify-content: center;
+      gap: 18px;
+      padding: clamp(28px, 4.5vw, 56px);
+      text-align: left;
+      border-right: 1px solid rgba(255, 255, 255, 0.09);
+      background: linear-gradient(145deg, rgba(18, 33, 48, 0.55), rgba(8, 13, 22, 0.2));
       overflow-y: auto;
     }
 
-    .menu-header {
-      text-align: center;
+    .menu-hero::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 12%;
+      bottom: 12%;
+      width: 3px;
+      background: linear-gradient(transparent, var(--cyan), transparent);
+      box-shadow: 0 0 18px var(--cyan);
     }
 
-    .menu-subtitle {
-      margin: 6px 0 0;
-      color: var(--muted);
-      font-family: "Chakra Petch", sans-serif;
-      font-size: 13px;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-    }
-
-    .menu-body {
-      display: grid;
-      grid-template-columns: minmax(280px, 420px);
-      gap: 24px;
-      justify-content: center;
-    }
-
-    .menu-panel {
+    .eyebrow {
       display: flex;
-      flex-direction: column;
-      gap: 12px;
-      text-align: left;
-    }
-
-    #auth-panel {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .auth-tabs {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-    }
-
-    #menu button.auth-tab {
-      padding: 10px 12px;
-      font-size: 13px;
-      background: rgba(255, 255, 255, 0.07);
-      color: var(--muted);
-      box-shadow: none;
-    }
-
-    #menu button.auth-tab.active {
-      background: rgba(0, 240, 255, 0.14);
-      border: 1px solid var(--cyan);
-      color: var(--cyan);
-    }
-
-    #menu button.guest-button {
-      padding: 10px 14px;
-      border: 1px solid var(--panel-border);
-      background: transparent;
-      box-shadow: none;
-      color: var(--muted);
-      font-size: 13px;
-    }
-
-    .input-label {
-      font-family: "Chakra Petch", sans-serif;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      color: var(--cyan);
-      text-transform: uppercase;
-    }
-
-    .right-panel {
-      background: rgba(15, 23, 42, 0.5);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 14px;
-      padding: 16px 20px;
-    }
-
-    .controls-title {
-      font-family: "Chakra Petch", sans-serif;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      color: var(--accent);
-      text-transform: uppercase;
-      margin-bottom: 6px;
-    }
-
-    .controls-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .control-row {
-      display: flex;
-      justify-content: space-between;
       align-items: center;
-      font-size: 13px;
-      color: var(--muted);
+      gap: 9px;
+      margin: 0;
+      color: var(--cyan);
+      font: 700 11px "Chakra Petch", sans-serif;
+      letter-spacing: 0.2em;
     }
 
-    .control-label {
-      font-family: "Outfit", sans-serif;
+    .eyebrow::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #58ff9c;
+      box-shadow: 0 0 12px #58ff9c;
     }
 
     #menu h1 {
       margin: 0;
       font-family: "Chakra Petch", sans-serif;
-      font-size: clamp(38px, 7vw, 64px);
-      letter-spacing: 0.12em;
+      font-size: clamp(44px, 6vw, 76px);
+      letter-spacing: 0.06em;
       font-weight: 900;
       text-transform: uppercase;
       color: #ffffff;
-      text-shadow: 0 0 25px rgba(255, 255, 255, 0.2);
-      line-height: 1;
+      text-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+      line-height: 0.9;
     }
 
     #menu h1 span {
@@ -211,48 +159,188 @@
       filter: drop-shadow(0 0 15px var(--accent-glow));
     }
 
+    .tagline {
+      max-width: 440px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.65;
+    }
+
+    .facts {
+      display: grid;
+      grid-template-columns: repeat(4, auto);
+      justify-content: start;
+      gap: 10px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .facts li {
+      display: grid;
+      gap: 2px;
+      min-width: 78px;
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .fact-value {
+      font: 700 20px "Chakra Petch", sans-serif;
+      color: var(--accent);
+    }
+
+    .fact-label {
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .hero-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 18px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .control-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .keys {
+      display: inline-flex;
+      gap: 3px;
+    }
+
+    .menu-auth {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: clamp(24px, 4vw, 40px) clamp(22px, 3.5vw, 36px);
+      overflow-y: auto;
+    }
+
+    #auth-panel,
+    #deploy-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      text-align: left;
+    }
+
+    .auth-title {
+      margin: 0 0 4px;
+      font: 700 12px "Chakra Petch", sans-serif;
+      letter-spacing: 0.18em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .auth-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      padding: 4px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    #menu button.auth-tab {
+      padding: 9px 12px;
+      font-size: 12px;
+      border-radius: 9px;
+      background: transparent;
+      color: var(--muted);
+      box-shadow: none;
+    }
+
+    #menu button.auth-tab.active {
+      background: rgba(0, 240, 255, 0.14);
+      color: var(--cyan);
+      box-shadow: inset 0 0 0 1px rgba(0, 240, 255, 0.5);
+    }
+
+    .input-label {
+      margin-top: 4px;
+      font-family: "Chakra Petch", sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      color: var(--cyan);
+      text-transform: uppercase;
+    }
+
     #menu input {
       font: inherit;
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 600;
-      padding: 12px 16px;
-      border-radius: 12px;
+      padding: 12px 14px;
+      border-radius: 11px;
       border: 1px solid var(--panel-border);
       background: rgba(15, 23, 42, 0.6);
       color: var(--text);
       width: 100%;
       outline: none;
-      transition: all 0.2s ease;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
       text-align: left;
     }
 
     #menu input:focus {
       border-color: var(--cyan);
       box-shadow: 0 0 20px var(--cyan-glow);
-      background: rgba(15, 23, 42, 0.9);
+    }
+
+    .password-field {
+      position: relative;
+    }
+
+    .password-input {
+      padding-right: 74px;
+    }
+
+    #menu button.password-toggle {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: auto;
+      padding: 5px 10px;
+      font-size: 11px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--muted);
+      box-shadow: none;
     }
 
     #menu button {
       font-family: "Chakra Petch", sans-serif;
-      font-size: 18px;
+      font-size: 17px;
       font-weight: 700;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      padding: 13px 20px;
+      padding: 14px 20px;
       border-radius: 12px;
       border: none;
       background: linear-gradient(135deg, #ffcf4a, #f59e0b);
       color: #0b0f19;
       width: 100%;
       cursor: pointer;
-      box-shadow: 0 8px 25px var(--accent-glow);
-      transition: all 0.2s ease;
+      box-shadow: 0 10px 28px var(--accent-glow);
+      transition: transform 0.2s ease, filter 0.2s ease, box-shadow 0.2s ease;
     }
 
     #menu button:hover:not(:disabled) {
       transform: translateY(-2px);
-      box-shadow: 0 12px 30px rgba(255, 207, 74, 0.6);
-      filter: brightness(1.1);
+      filter: brightness(1.08);
     }
 
     #menu button:active:not(:disabled) {
@@ -265,12 +353,108 @@
       filter: grayscale(0.6);
     }
 
+    #menu button#play {
+      margin-top: 8px;
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--muted);
+      font: 700 10px "Chakra Petch", sans-serif;
+      letter-spacing: 0.2em;
+    }
+
+    .divider::before,
+    .divider::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    #menu button.guest-button {
+      padding: 11px 14px;
+      border: 1px solid rgba(0, 240, 255, 0.42);
+      background: transparent;
+      box-shadow: none;
+      color: var(--cyan);
+      font-size: 12px;
+    }
+
+    #menu button.guest-button:hover:not(:disabled) {
+      background: rgba(0, 240, 255, 0.09);
+    }
+
     #menu-status {
       min-height: 1.4em;
       margin: 0;
       font-size: 13px;
       color: var(--muted);
       text-align: center;
+    }
+
+    #menu-status.error {
+      color: var(--danger);
+    }
+
+    .auth-note {
+      margin: 0;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.5;
+      text-align: center;
+      opacity: 0.8;
+    }
+
+    .deploy-name {
+      margin: 0;
+      font: 900 26px "Chakra Petch", sans-serif;
+      letter-spacing: 0.04em;
+    }
+
+    .deploy-who {
+      color: var(--accent);
+    }
+
+    .deploy-progress {
+      height: 4px;
+      border-radius: 2px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .deploy-progress::after {
+      content: "";
+      display: block;
+      width: 40%;
+      height: 100%;
+      border-radius: 2px;
+      background: linear-gradient(90deg, var(--cyan), #6fffe0);
+      animation: deploy-sweep 1.4s ease-in-out infinite;
+    }
+
+    @keyframes deploy-sweep {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(260%); }
+    }
+
+    #deploy-panel.settled .deploy-progress {
+      display: none;
+    }
+
+    .menu-link {
+      color: var(--muted);
+      font: 700 11px "Chakra Petch", sans-serif;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      text-align: center;
+      text-decoration: none;
+    }
+
+    .menu-link:hover {
+      color: var(--text);
     }
 
     kbd {
@@ -286,15 +470,24 @@
       display: inline-block;
     }
 
-    @media (max-width: 640px) {
-      .menu-body {
+    @media (max-width: 860px) {
+      .menu-card {
         grid-template-columns: 1fr;
-        gap: 16px;
+        max-height: none;
       }
 
-      .menu-card {
-        padding: 20px 18px;
-        border-radius: 18px;
+      .menu-hero {
+        border-right: 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+        padding: 28px 24px 22px;
+      }
+
+      .hero-controls {
+        display: none;
+      }
+
+      .facts {
+        grid-template-columns: repeat(2, 1fr);
       }
     }
 
@@ -499,8 +692,8 @@
     #weapon-slots { display: flex; justify-content: flex-end; gap: 5px; margin-top: 9px; }
     .weapon-slot { padding: 3px 7px; border: 1px solid rgba(255,255,255,.16); border-radius: 5px; color: var(--muted); font: 700 11px "Chakra Petch", sans-serif; }
     .weapon-slot.selected { color: var(--text); border-color: var(--cyan); background: rgba(0,240,255,.14); box-shadow: 0 0 10px var(--cyan-glow); }
-    #minimap { position: absolute; right: 28px; top: 24px; width: 108px; height: 108px; overflow: hidden; border: 1px solid var(--panel-border); border-radius: 50%; background: radial-gradient(circle, rgba(0,240,255,.16) 0 2px, transparent 3px), var(--panel); box-shadow: inset 0 0 24px var(--panel-glow); }
-    #minimap-canvas { display: block; width: 108px; height: 108px; }
+    #minimap { position: absolute; right: 28px; top: 24px; width: 140px; height: 140px; overflow: hidden; border: 1px solid var(--panel-border); border-radius: 50%; background: var(--panel); box-shadow: inset 0 0 24px var(--panel-glow); }
+    #minimap-canvas { display: block; width: 140px; height: 140px; }
 
     .stats-row {
       display: flex;
@@ -660,6 +853,49 @@
         transform: scale(1.02);
       }
     }
+
+    /* Full map (M) */
+    #fullmap {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      padding: 18px 20px 16px;
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      backdrop-filter: blur(20px);
+      border-radius: 16px;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), inset 0 0 30px var(--panel-glow);
+    }
+    #fullmap-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 12px;
+      font-family: "Chakra Petch", sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+    .fullmap-hint { color: var(--muted); font-size: 11px; align-self: center; }
+    #fullmap-canvas {
+      display: block;
+      width: min(560px, 70vmin);
+      height: min(560px, 70vmin);
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.35);
+    }
+    #fullmap-legend {
+      display: flex;
+      gap: 18px;
+      margin-top: 10px;
+      color: var(--muted);
+      font: 700 10px "Chakra Petch", sans-serif;
+      letter-spacing: 0.12em;
+    }
+    .legend-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; vertical-align: middle; }
 
     /* Scoreboard Modal */
     #scoreboard {
@@ -882,7 +1118,7 @@
       <span id="weapon-name">RIFLE</span><span id="weapon-ammo">∞ AMMO</span>
       <div id="weapon-slots"><span class="weapon-slot selected" data-weapon="0">1 RFL</span><span class="weapon-slot" data-weapon="1">2 SMG</span><span class="weapon-slot" data-weapon="2">3 RPG</span></div>
     </div>
-    <div id="minimap" role="img" aria-label="Tactical minimap"><canvas id="minimap-canvas" width="108" height="108"></canvas></div>
+    <div id="minimap" role="img" aria-label="Tactical minimap"><canvas id="minimap-canvas" width="140" height="140"></canvas></div>
 
     <ul id="kill-feed"></ul>
     <div id="center-message"></div>
@@ -896,6 +1132,11 @@
       </div>
     </div>
 
+    <div id="fullmap" hidden>
+      <div id="fullmap-header">Durbar Square · Old Kathmandu<span class="fullmap-hint">M TO CLOSE</span></div>
+      <canvas id="fullmap-canvas" width="560" height="560"></canvas>
+      <div id="fullmap-legend"><div><i class="legend-dot" style="background:#00f0ff"></i>YOU</div><div><i class="legend-dot" style="background:#ffcf4a"></i>OPPONENTS</div><div><i class="legend-dot" style="background:#ff9a3c"></i>GRENADES</div><div><i class="legend-dot" style="background:rgba(196,118,92,.7)"></i>HOUSES</div><div><i class="legend-dot" style="background:rgba(255,207,74,.55)"></i>TEMPLES</div><div><i class="legend-dot" style="background:rgba(201,165,90,.5)"></i>COVER</div><div><i class="legend-dot" style="background:rgba(255,95,109,.7)"></i>GATES</div></div>
+    </div>
     <div id="scoreboard" hidden>
       <div id="scoreboard-header">
         <span>Match Leaderboard</span>
@@ -916,31 +1157,57 @@
 
   <form id="menu">
     <div class="menu-card">
-      <div class="menu-header">
+      <section class="menu-hero">
+        <p class="eyebrow">LAN MULTIPLAYER · OLD KATHMANDU</p>
         <h1>HEAD<span>SHOT</span></h1>
-        <p class="menu-subtitle">Tactical 3D Multiplayer FPS · Kathmandu</p>
-      </div>
-
-      <div class="menu-body">
-        <div class="menu-panel left-panel">
-          <div id="auth-panel">
-            <div class="auth-tabs" role="tablist" aria-label="Account access">
-              <button id="login-tab" class="auth-tab active" type="button" role="tab" aria-selected="true">Log in</button>
-              <button id="signup-tab" class="auth-tab" type="button" role="tab" aria-selected="false">Sign up</button>
-            </div>
-            <label id="name-label" for="name" class="input-label" hidden>OPERATIVE CALLSIGN</label>
-            <input id="name" maxlength="16" autocomplete="name" placeholder="Enter your name" required hidden />
-            <label for="email" class="input-label">EMAIL</label>
-            <input id="email" type="email" autocomplete="email" placeholder="you@example.com" required />
-            <label for="password" class="input-label">PASSWORD</label>
-            <input id="password" type="password" minlength="6" autocomplete="current-password" placeholder="At least 6 characters" required />
-            <button id="play" type="submit" disabled>Loading…</button>
-            <button id="guest-play" class="guest-button" type="button" disabled>Play as Guest</button>
-            <p id="menu-status"></p>
-          </div>
+        <p class="tagline">1814. The King's guard holds Durbar Square against Ochterlony's redcoats. Rifle, SMG or bazooka, through the bazaar and over the rooftops: first to fifteen kills takes the square.</p>
+        <ul class="facts">
+          <li><span class="fact-value">8</span><span class="fact-label">players</span></li>
+          <li><span class="fact-value">3</span><span class="fact-label">weapons</span></li>
+          <li><span class="fact-value">15</span><span class="fact-label">kills to win</span></li>
+          <li><span class="fact-value">132 m</span><span class="fact-label">arena</span></li>
+        </ul>
+        <div class="hero-controls">
+          <div class="control-row"><span>Move</span><span class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span></div>
+          <div class="control-row"><span>Fire · aim</span><span class="keys"><kbd>L-Click</kbd><kbd>R-Click</kbd></span></div>
+          <div class="control-row"><span>Jump · sprint</span><span class="keys"><kbd>Space</kbd><kbd>Shift</kbd></span></div>
+          <div class="control-row"><span>Weapons</span><span class="keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span></div>
+          <div class="control-row"><span>Grenade · reload</span><span class="keys"><kbd>G</kbd><kbd>R</kbd></span></div>
+          <div class="control-row"><span>Map · scores</span><span class="keys"><kbd>M</kbd><kbd>Tab</kbd></span></div>
         </div>
+      </section>
 
-      </div>
+      <section class="menu-auth">
+        <div id="auth-panel">
+          <p class="auth-title">Report for duty</p>
+          <div class="auth-tabs" role="tablist" aria-label="Account access">
+            <button id="login-tab" class="auth-tab active" type="button" role="tab" aria-selected="true">Log in</button>
+            <button id="signup-tab" class="auth-tab" type="button" role="tab" aria-selected="false">Sign up</button>
+          </div>
+          <label id="name-label" for="name" class="input-label" hidden>Callsign</label>
+          <input id="name" maxlength="16" autocomplete="name" placeholder="How the kill feed will name you" required hidden />
+          <label for="email" class="input-label">Email</label>
+          <input id="email" type="email" autocomplete="email" placeholder="you@example.com" required />
+          <label for="password" class="input-label">Password</label>
+          <div class="password-field">
+            <input id="password" class="password-input" type="password" minlength="6" autocomplete="current-password" placeholder="At least 6 characters" required />
+            <button id="password-toggle" class="password-toggle" type="button" aria-pressed="false">Show</button>
+          </div>
+          <button id="play" type="submit">Log in &amp; play</button>
+          <p id="menu-status" aria-live="polite"></p>
+          <div class="divider">OR</div>
+          <button id="guest-play" class="guest-button" type="button">Play as guest</button>
+          <p class="auth-note">Accounts and career stats stay in this browser. A guest's stats last until the tab closes.</p>
+        </div>
+        <div id="deploy-panel" hidden>
+          <p class="auth-title">Deploying</p>
+          <p class="deploy-name"><span class="deploy-who" id="deploy-name"></span></p>
+          <div class="deploy-progress"></div>
+          <p id="deploy-status" class="auth-note"></p>
+          <button id="rejoin" type="button" hidden>Rejoin the match</button>
+          <a class="menu-link" href="/lobby.html">Back to the lobby</a>
+        </div>
+      </section>
     </div>
   </form>
 

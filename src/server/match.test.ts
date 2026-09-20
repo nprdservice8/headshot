@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import { before, test } from "node:test";
 import RAPIER from "@dimforge/rapier3d-compat";
 import {
-  BODY_DAMAGE,
   EYE_HEIGHT,
-  FIRE_INTERVAL_TICKS,
   GRENADE_FUSE_TICKS,
   HEALTH_REGEN_DELAY_TICKS,
   HEALTH_REGEN_INTERVAL_TICKS,
@@ -12,10 +10,11 @@ import {
   MATCH_RESTART_TICKS,
   MAX_HP,
   MAX_INPUT_QUEUE,
+  SNAPSHOT_INTERVAL_TICKS,
   SPAWN_SAFE_DISTANCE,
 } from "../shared/constants.ts";
 import { BUTTON, type InputMessage, type ServerMessage } from "../shared/protocol.ts";
-import { WEAPON, weaponDefinition } from "../shared/weapons.ts";
+import { damageAtRange, WEAPON, weaponDefinition } from "../shared/weapons.ts";
 import type { SpawnPoint } from "../shared/world.ts";
 import {
   addPlayer,
@@ -28,6 +27,12 @@ import {
 } from "./match.ts";
 
 type Sent = { to: number | "everyone"; message: ServerMessage };
+
+const RIFLE = weaponDefinition(WEAPON.RIFLE);
+const SMG = weaponDefinition(WEAPON.SMG);
+const BAZOOKA = weaponDefinition(WEAPON.BAZOOKA);
+const BODY_DAMAGE = RIFLE.damage;
+const FIRE_INTERVAL_TICKS = RIFLE.fireIntervalTicks;
 
 before(async () => {
   await RAPIER.init();
@@ -170,7 +175,7 @@ test("lag compensation: a shot hits where the target was on the shooter's screen
 
 test("arena walls block shots", () => {
   const { match, sent, shooter, target } = setup();
-  // The burnt-out truck spanning z = -43.9..-36.1 stands between them.
+  // The burnt-out truck spanning z = -42.9..-37.1 stands between them.
   place(match, shooter, 3, -34);
   place(match, target, 3, -44.8);
   ticks(match, 20);
@@ -178,7 +183,7 @@ test("arena walls block shots", () => {
   tickMatch(match);
   assert.equal(target.hp, MAX_HP);
   const shot = messagesOfType(sent, "shot").at(-1);
-  assert.ok(shot && shot.toZ < -35.9 && shot.toZ > -36.4, `shot ended at z = ${shot?.toZ}`);
+  assert.ok(shot && shot.toZ < -36.9 && shot.toZ > -37.4, `shot ended at z = ${shot?.toZ}`);
 });
 
 test("the server enforces the fire rate", () => {
@@ -208,6 +213,11 @@ test("rifle ammo depletes, blocks firing at zero, and a reload refills it", () =
   input(match, shooter, BUTTON.RELOAD, 0, 0);
   tickMatch(match);
   assert.equal(shooter.reloading, true);
+  // Everyone is told, so other clients can show and sound the reload.
+  ticks(match, SNAPSHOT_INTERVAL_TICKS);
+  const snapshots = messagesOfType(sent, "snapshot");
+  const seen = snapshots[snapshots.length - 1]?.players.find((p) => p.id === shooter.id);
+  assert.equal(seen?.reloading, true);
   ticks(match, weaponDefinition(WEAPON.RIFLE).reloadTicks);
   assert.equal(shooter.ammo[WEAPON.RIFLE], magSize);
 
@@ -219,19 +229,64 @@ test("rifle ammo depletes, blocks firing at zero, and a reload refills it", () =
 test("bazooka fires a swept straight rocket, splashes, and respects its cooldown", () => {
   const { match, sent, shooter, target } = setup();
   place(match, shooter, -3, -38);
+  place(match, target, -5.5, -44);
+  ticks(match, 20);
+  // Aimed past the target's shoulder: the rocket flies by and bursts on the ground beyond.
+  input(match, shooter, BUTTON.FIRE, 0, aimPitch(shooter, 0.9, 6), match.tick, WEAPON.BAZOOKA);
+  tickMatch(match);
+  assert.equal(shooter.ammo[WEAPON.BAZOOKA], 0);
+  assert.equal(shooter.reserve[WEAPON.BAZOOKA], BAZOOKA.reserve);
+  assert.equal(match.rockets.length, 1);
+  ticks(match, Math.ceil((8 / (BAZOOKA.projectile?.speed ?? 1)) * 60) + 5);
+  assert.equal(match.rockets.length, 0);
+  assert.ok(target.hp < MAX_HP && target.hp > 0, `splash only: target hp ${target.hp}`);
+  assert.ok(messagesOfType(sent, "explosion").length > 0);
+  input(match, shooter, BUTTON.FIRE, 0, 0, match.tick, WEAPON.BAZOOKA);
+  tickMatch(match);
+  assert.equal(match.rockets.length, 0, "an empty bazooka cannot fire");
+});
+
+test("a direct rocket hit does the direct damage once, then the bazooka reloads from its reserve", () => {
+  const { match, shooter, target } = setup();
+  place(match, shooter, -3, -38);
   place(match, target, -3, -44);
   ticks(match, 20);
-  input(match, shooter, BUTTON.FIRE, 0, aimPitch(shooter, 0.9, 6), match.tick, 2);
+  input(match, shooter, BUTTON.FIRE, 0, aimPitch(shooter, 0.9, 6), match.tick, WEAPON.BAZOOKA);
   tickMatch(match);
-  assert.equal(shooter.rockets, 2);
-  assert.equal(match.rockets.length, 1);
-  ticks(match, 12);
+  ticks(match, Math.ceil((6 / (BAZOOKA.projectile?.speed ?? 1)) * 60) + 5);
   assert.equal(match.rockets.length, 0);
-  assert.ok(target.hp < MAX_HP, `target hp ${target.hp}`);
-  assert.ok(messagesOfType(sent, "explosion").length > 0);
-  input(match, shooter, BUTTON.FIRE, 0, 0, match.tick, 2);
+  assert.equal(target.alive, false, "150 direct damage kills outright");
+  assert.equal(target.deaths, 1);
+
+  // Holding fire on an empty tube starts the reload; it fills from the reserve.
+  input(match, shooter, BUTTON.FIRE, 0, 0, match.tick, WEAPON.BAZOOKA);
   tickMatch(match);
-  assert.equal(match.rockets.length, 0, "bazooka cannot bypass its cooldown");
+  assert.equal(shooter.reloading, true);
+  ticks(match, BAZOOKA.reloadTicks);
+  assert.equal(shooter.reloading, false);
+  assert.equal(shooter.ammo[WEAPON.BAZOOKA], 1);
+  assert.equal(shooter.reserve[WEAPON.BAZOOKA], BAZOOKA.reserve - 1);
+});
+
+test("the SMG hits hard up close and its damage fades with range", () => {
+  const { match, shooter, target } = setup();
+  place(match, shooter, -3, -38);
+  place(match, target, -3, -44);
+  ticks(match, 20);
+  input(match, shooter, BUTTON.FIRE, 0, aimPitch(shooter, 0.9, 6), match.tick, WEAPON.SMG);
+  tickMatch(match);
+  assert.equal(target.hp, MAX_HP - SMG.damage);
+  assert.ok(SMG.fireIntervalTicks < RIFLE.fireIntervalTicks, "the SMG fires faster");
+  assert.equal(damageAtRange(SMG, SMG.fullDamageRange), SMG.damage);
+  assert.equal(damageAtRange(SMG, SMG.range), Math.round(SMG.damage * SMG.minDamageFraction));
+  // Time to kill from the first hit, in ticks, at a given distance.
+  const ticksToKill = (weapon: typeof SMG, distance: number) =>
+    (Math.ceil(MAX_HP / damageAtRange(weapon, distance)) - 1) * weapon.fireIntervalTicks;
+  assert.ok(ticksToKill(SMG, 10) <= ticksToKill(RIFLE, 10), "the SMG keeps up close in");
+  assert.ok(ticksToKill(SMG, 50) > ticksToKill(RIFLE, 50), "the rifle wins at range");
+  assert.ok(
+    SMG.movementMultiplier > RIFLE.movementMultiplier && SMG.reloadTicks < RIFLE.reloadTicks,
+  );
 });
 
 test("a grenade explodes after its fuse, hurting and pushing nearby players", () => {

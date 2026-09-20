@@ -44,10 +44,25 @@ def material_color(material):
     if material.node_tree:
         for node in material.node_tree.nodes:
             if node.type == "BSDF_PRINCIPLED":
-                return tuple(node.inputs["Base Color"].default_value)
+                return socket_color(node.inputs["Base Color"])
             if node.type == "BSDF_DIFFUSE":
-                return tuple(node.inputs["Color"].default_value)
+                return socket_color(node.inputs["Color"])
     return tuple(material.diffuse_color)
+
+
+def socket_color(socket):
+    """The colour a shader input would show with vertex colours ignored. When a glTF ships (white)
+    vertex colours, the importer multiplies them into the base colour through a Mix node, and the
+    material's real colour is the Mix node's other input."""
+    if not socket.is_linked:
+        return tuple(socket.default_value)
+    node = socket.links[0].from_node
+    if node.type == "MIX":
+        # The Mix node has several inputs named "A"/"B", one pair per data type.
+        for other in node.inputs:
+            if other.identifier in ("A_Color", "B_Color") and not other.is_linked:
+                return tuple(other.default_value)
+    return tuple(socket.default_value)
 
 
 _shared_materials = {}
@@ -67,23 +82,67 @@ def shared_material(name):
     return material
 
 
+def material_image(material):
+    """The image a material's base colour comes from, when it is painted from a texture."""
+    if not material or not material.node_tree:
+        return None
+    for node in material.node_tree.nodes:
+        if node.type == "BSDF_PRINCIPLED" and node.inputs["Base Color"].is_linked:
+            source = node.inputs["Base Color"].links[0].from_node
+            if source.type == "TEX_IMAGE" and source.image:
+                return source.image
+    return None
+
+
+_image_pixels = {}
+
+
+def sample_image(image, u, v):
+    """The linear colour of an image at a texture coordinate. Kits like Kenney's paint every face
+    from a flat cell of a small palette image, so sampling one point per face is exact."""
+    pixels = _image_pixels.get(image.name)
+    if pixels is None:
+        # Image.pixels comes back as stored: sRGB-encoded for ordinary 8-bit textures.
+        pixels = (list(image.pixels), image.size[0], image.size[1])
+        _image_pixels[image.name] = pixels
+    data, width, height = pixels
+    x = min(width - 1, max(0, int((u % 1) * width)))
+    y = min(height - 1, max(0, int((v % 1) * height)))
+    at = (y * width + x) * 4
+
+    def to_linear(c):
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+    return (to_linear(data[at]), to_linear(data[at + 1]), to_linear(data[at + 2]), 1.0)
+
+
 def flatten_materials(obj, color_override=None, group_of=None):
     """Bakes each face's material colour into a vertex colour, then replaces the materials with a
     few shared ones so the exported mesh has one primitive (one draw call) per group.
 
     `color_override(name)` may return a colour to store instead, and `group_of(name)` names the
-    output material for a source material (default "Body")."""
+    output material for a source material (default "Body"). Faces painted from a palette texture
+    take the texture's colour at their centre."""
     mesh = obj.data
+    # Colours the source shipped with would otherwise stay the active (exported) attribute.
+    for existing in list(mesh.color_attributes):
+        mesh.color_attributes.remove(existing)
     colors = mesh.color_attributes.new("Color", "FLOAT_COLOR", "CORNER")
     sources = [m for m in mesh.materials]
+    uvs = mesh.uv_layers.active.data if mesh.uv_layers.active else None
     groups = []
     face_group = []
     for polygon in mesh.polygons:
         source = sources[polygon.material_index] if sources else None
         name = base_name(source) if source else ""
-        color = (color_override and color_override(name)) or (
-            material_color(source) if source else (1, 1, 1, 1)
-        )
+        image = material_image(source)
+        color = color_override and color_override(name)
+        if not color and image and uvs:
+            u = sum(uvs[i].uv.x for i in polygon.loop_indices) / len(polygon.loop_indices)
+            v = sum(uvs[i].uv.y for i in polygon.loop_indices) / len(polygon.loop_indices)
+            color = sample_image(image, u, v)
+        if not color:
+            color = material_color(source) if source else (1, 1, 1, 1)
         for loop_index in polygon.loop_indices:
             colors.data[loop_index].color = color
         group = group_of(name) if group_of else "Body"
