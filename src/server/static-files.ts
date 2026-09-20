@@ -11,10 +11,35 @@ export const CONTENT_TYPES: Readonly<Record<string, string>> = {
   ".glb": "model/gltf-binary",
   ".ktx2": "image/ktx2",
   ".webp": "image/webp",
+  ".wasm": "application/wasm",
+  ".ogg": "audio/ogg",
 };
+
+/** File types worth gzipping on the way out. Images and Vorbis are already compressed. */
+const COMPRESSIBLE = new Set([".html", ".js", ".map", ".css", ".json", ".glb", ".wasm"]);
 
 export function contentTypeFor(filePath: string): string {
   return CONTENT_TYPES[extname(filePath).toLowerCase()] ?? "application/octet-stream";
+}
+
+export function isCompressible(filePath: string): boolean {
+  return COMPRESSIBLE.has(extname(filePath).toLowerCase());
+}
+
+/** Whether a request's Accept-Encoding header allows a gzipped body. */
+export function acceptsGzip(acceptEncoding: string | undefined): boolean {
+  if (!acceptEncoding) return false;
+  return acceptEncoding.split(",").some((entry) => {
+    const [coding, ...params] = entry.trim().split(";");
+    if (coding?.trim() !== "gzip") return false;
+    return !params.some((param) => param.replace(/\s/g, "") === "q=0");
+  });
+}
+
+/** A validator that changes whenever the file does, so a browser that has it can ask "still this
+ * one?" and get a 304 instead of the whole file again. */
+export function etagFor(size: number, mtimeMs: number): string {
+  return `"${size.toString(36)}-${Math.floor(mtimeMs).toString(36)}"`;
 }
 
 /**

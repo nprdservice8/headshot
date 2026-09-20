@@ -14,7 +14,7 @@ A 3D first-person deathmatch that runs in the browser: open a link and play. Ins
 | Server | Node.js 22 + `ws`. Node runs `.ts` files directly; no server build. |
 | Language | TypeScript, used for type checking only |
 | Client bundle | esbuild: one minified file in `dist/` |
-| Format and lint | Biome |
+| Format and lint | Biome. Files are LF, pinned by `.gitattributes` so Windows checkouts pass the formatter |
 | Tests | `node --test` |
 | Art pipeline (dev machine only) | Blender 5.2 run headless from Python scripts; glTF Transform (`@gltf-transform/cli`) for meshopt compression |
 | Models | Free CC0 packs by Quaternius: Ultimate Modular Men (rig, animations and the body parts both characters are dressed from), Ultimate Gun Pack (rifle, SMG), Toon Shooter Game Kit (props, grenade, rocket launcher, wrecked car); Kenney's Car Kit (CC0) for the traffic; Noto Sans Devanagari (OFL) for the shop signs. Sounds (all CC0, recorded): Kenney's Impact Sounds (footsteps, jumps, landings), The Free Firearm Sound Library (AR-15 rifle, Carl Gustav M45 SMG, Mossberg 12-gauge as the launcher), rubberduck's fireworks bangs (explosions), SpringySpringo's airsoft reloads and Brian MacIntosh's clip loads (reload handling) |
@@ -43,7 +43,7 @@ art/                  builds public/assets/ (never shipped)
   signs.py            Nepali lettering: shop names on boards, slogans on walls, set from a Devanagari font
   scenery.py          unreachable: the city beyond the edge, flags, cables, hills, Himalaya
   source/, out/       downloads and intermediate files (git-ignored)
-build.ts              esbuild: production bundle, or watch + server with --dev
+build.ts              esbuild: production bundle, or watch + server with --dev; splits Rapier's WASM into dist/
 src/
   shared/             runs in the browser AND on the server
     constants.ts      every tunable number
@@ -54,7 +54,7 @@ src/
     combat.ts         hit tests, damage, explosion falloff, lag-compensation rewind
   server/             Node only
     main.ts           WebSocket, connection limits, tick loop, fake lag, GET /api/lobby
-    static-files.ts   safe path resolution for public/ and dist/
+    static-files.ts   safe path resolution for public/ and dist/, MIME types, gzip and ETag helpers
     match.ts          authoritative tick: inputs, simulation, grenades, respawns, scores, snapshots
   client/             browser only
     main.ts           boot: load assets, Rapier init, connect, main loop
@@ -213,7 +213,7 @@ Hitboxes are not Rapier colliders.
   - Names are limited to 16 characters with control characters removed.
 - One connection's error closes that connection, never the whole server process.
 - Show player-provided text with `textContent`, never `innerHTML`.
-- The static file server resolves each requested path and rejects anything outside `public/` and `dist/`.
+- The static file server resolves each requested path and rejects anything outside `public/` and `dist/`. It gzips text, models and WASM (not images or sound) once, at startup, so the event loop never blocks on it mid-match, and answers `If-None-Match` with a 304, so a reload only re-downloads what the last build changed.
 - The server decides fire rate, damage, grenade count and respawns. The client only draws them.
 - Outside trust boundaries, don't `try/catch` to hide bugs. Let programmer errors fail loudly.
 
@@ -304,7 +304,7 @@ Steps 1–7 are built (2026-09-17). Step 7 also replaced step 4's box characters
 ## Commands (set up in step 1)
 
 - `npm run dev`: builds the client in watch mode and starts the server, which prints the LAN address.
-- `npm run build`: builds the production client bundle into `dist/` and checks the download budget (bundle plus `public/assets/`).
+- `npm run build`: builds the production client bundle into `dist/` and checks the download budget (bundle, Rapier's `.wasm` and `public/assets/`). Rapier's WASM is cut out of the bundle and served as `dist/rapier_wasm3d_bg.wasm` so it streams and compiles while the rest downloads (see `build.ts`); `index.html` preloads it and the big assets.
 - `npm run art`: rebuilds `public/assets/` (downloads the CC0 sources, runs Blender, bakes lighting: a few minutes). `npm run art -- player`, `-- map` or `-- sounds` for one part (`sounds` also needs The Free Firearm Sound Library extracted into `art/source/firearms/`, see `art/build.ts`); add `--preview` to render test images into `art/out/preview/` instead. Needs Blender 5.2 (set `BLENDER` if it isn't at `%LOCALAPPDATA%\Programs\blender-5.2.2-windows-x64\`).
 - `npm start`: runs the server and serves whatever `npm run build` last produced.
 - `npm run check`: type check, Biome, tests.

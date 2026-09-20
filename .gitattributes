@@ -1,0 +1,2 @@
+# Biome formats with LF; keep the working copy that way whatever core.autocrlf says.
+* text=auto eol=lf

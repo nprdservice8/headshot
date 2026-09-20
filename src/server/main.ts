@@ -1,7 +1,8 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { networkInterfaces } from "node:os";
 import { resolve } from "node:path";
+import { gzipSync } from "node:zlib";
 import RAPIER from "@dimforge/rapier3d-compat";
 import { type RawData, type WebSocket, WebSocketServer } from "ws";
 import {
@@ -20,7 +21,13 @@ import {
   tickMatch,
   welcomePlayer,
 } from "./match.ts";
-import { contentTypeFor, resolveStaticPath } from "./static-files.ts";
+import {
+  acceptsGzip,
+  contentTypeFor,
+  etagFor,
+  isCompressible,
+  resolveStaticPath,
+} from "./static-files.ts";
 
 const ROOT = resolve(import.meta.dirname, "..", "..");
 const PUBLIC_DIR = resolve(ROOT, "public");
@@ -147,17 +154,67 @@ const httpServer = createServer((request, response) => {
     response.writeHead(404).end();
     return;
   }
-  readFile(filePath).then(
-    (body) => {
+  loadStaticFile(filePath).then(
+    (file) => {
+      if (request.headers["if-none-match"] === file.etag) {
+        response.writeHead(304, { ETag: file.etag, "Cache-Control": "no-cache" }).end();
+        return;
+      }
+      const gzipped = file.gzipped && acceptsGzip(request.headers["accept-encoding"]);
       response.writeHead(200, {
         "Content-Type": contentTypeFor(filePath),
         "Cache-Control": "no-cache",
+        ETag: file.etag,
+        Vary: "Accept-Encoding",
+        ...(gzipped ? { "Content-Encoding": "gzip" } : {}),
       });
+      // Safe: `gzipped` is only true when file.gzipped is set.
+      const body = gzipped ? (file.gzipped as Buffer) : file.body;
       response.end(request.method === "HEAD" ? undefined : body);
     },
     () => response.writeHead(404).end(),
   );
 });
+
+/** A file as served: read and gzipped once, then kept until it changes on disk (the dev build
+ * rewrites dist/ on every edit). Browsers revalidate with the ETag and get a 304 when unchanged,
+ * so a reload only re-downloads what the last build touched. */
+type StaticFile = {
+  mtimeMs: number;
+  size: number;
+  etag: string;
+  body: Buffer;
+  gzipped: Buffer | null;
+};
+const staticFiles = new Map<string, StaticFile>();
+
+async function loadStaticFile(filePath: string): Promise<StaticFile> {
+  const { mtimeMs, size } = await stat(filePath);
+  const cached = staticFiles.get(filePath);
+  if (cached && cached.mtimeMs === mtimeMs && cached.size === size) return cached;
+  const body = await readFile(filePath);
+  const file: StaticFile = {
+    mtimeMs,
+    size,
+    etag: etagFor(size, mtimeMs),
+    body,
+    gzipped: isCompressible(filePath) ? gzipSync(body) : null,
+  };
+  staticFiles.set(filePath, file);
+  return file;
+}
+
+/** Gzipping the big files blocks the event loop (about 50 ms for Rapier's WASM), which would stall
+ * everyone's ticks the first time a newcomer downloads one. Doing it all before the server listens
+ * moves that cost to startup; in dev, a rebuilt dist/ file is gzipped again on its next request. */
+async function warmStaticFiles(): Promise<void> {
+  for (const dir of [PUBLIC_DIR, DIST_DIR]) {
+    const entries = await readdir(dir, { recursive: true, withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      if (entry.isFile()) await loadStaticFile(resolve(entry.parentPath, entry.name));
+    }
+  }
+}
 
 const socketServer = new WebSocketServer({ server: httpServer, maxPayload: MAX_MESSAGE_BYTES });
 
@@ -227,6 +284,7 @@ setInterval(() => {
   tickWorstMs = 0;
 }, TICK_STATS_INTERVAL_MS);
 
+await warmStaticFiles();
 httpServer.listen(PORT, () => {
   console.log("Headshot server running");
   console.log(`  On this PC:       http://localhost:${PORT}`);

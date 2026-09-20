@@ -12,6 +12,12 @@
     href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700;900&family=Outfit:wght@400;600;700;900&display=swap"
     rel="stylesheet" />
   <link rel="modulepreload" href="/dist/game.js" />
+  <!-- The big downloads start with the page instead of waiting for the script to ask for them. -->
+  <link rel="preload" href="/dist/rapier_wasm3d_bg.wasm" as="fetch" crossorigin />
+  <link rel="preload" href="/assets/map.glb" as="fetch" crossorigin />
+  <link rel="preload" href="/assets/character.glb" as="fetch" crossorigin />
+  <link rel="preload" href="/assets/viewmodel.glb" as="fetch" crossorigin />
+  <link rel="preload" href="/assets/arena-light.webp" as="image" crossorigin />
   <style>
     :root {
       --panel: rgba(10, 14, 23, 0.75);
