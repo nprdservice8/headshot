@@ -61,8 +61,8 @@ export const WEAPON_DEFINITIONS: readonly [WeaponDefinition, WeaponDefinition, W
   // Medium range, versatile: full damage out to 60 m, still worth firing beyond.
   {
     id: WEAPON.RIFLE,
-    name: "Rifle",
-    shortName: "RFL",
+    name: "Assault Rifle",
+    shortName: "AR",
     damage: 35,
     fullDamageRange: 60,
     minDamageFraction: 0.6,
@@ -81,7 +81,7 @@ export const WEAPON_DEFINITIONS: readonly [WeaponDefinition, WeaponDefinition, W
   // fire rate can't make up for a fifth), then loses hard past it, and moves quicker.
   {
     id: WEAPON.SMG,
-    name: "SMG",
+    name: "Submachine Gun",
     shortName: "SMG",
     damage: 25,
     fullDamageRange: 25,
