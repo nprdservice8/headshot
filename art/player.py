@@ -69,6 +69,9 @@ RIGHT = Vector((-1, 0, 0))
 RIFLE_HANDGUARD = Vector((0, -0.22, 0.075))
 RIFLE_MUZZLE = Vector((0, -0.585, 0.1035))
 RIFLE_BUTT = Vector((0, 0.2535, 0.057))
+# Where the reflex sight's mount stands on the top rail. Its dot sits REFLEX_HEIGHT above, high
+# enough that the pack's front post hides behind the ring's rim when aiming.
+RIFLE_REFLEX = Vector((0, -0.12, 0.132))
 
 # The SMG and bazooka share the rifle's grip-at-origin, barrel-along--Y convention and ride its
 # hand pose rather than getting their own IK, which is close enough for a held prop.
@@ -77,6 +80,7 @@ RIFLE_BUTT = Vector((0, 0.2535, 0.057))
 SMG_SCALE = RIFLE_SCALE
 SMG_MUZZLE = Vector((0, -0.365, 0.092))
 SMG_HANDGUARD = Vector((0, -0.2, 0.06))
+SMG_REFLEX = Vector((0, -0.1, 0.147))
 # The toon kit's launcher is fat and comes in metres with its grip 13 cm ahead of the origin;
 # it's shrunk to a shoulder-sized tube, then shifted so the grip lands in the hand and the
 # support hand cups the tube's underside.
@@ -84,6 +88,19 @@ BAZOOKA_SCALE = 0.5
 BAZOOKA_OFFSET = Vector((0, 0.065, -0.05))
 BAZOOKA_MUZZLE = Vector((0, -0.325, 0.134))
 BAZOOKA_HANDGUARD = Vector((0, -0.16, 0.01))
+
+# The reflex sight both guns carry: a ring standing on a post, with a dot floating at its centre.
+# The dot is its own material so the game can draw it unlit; the eye looks through the ring's
+# centre when aiming (client/render.ts lines the `Sight` point up on the camera's axis).
+REFLEX_HEIGHT = 0.075
+REFLEX_RING_RADIUS = 0.04
+REFLEX_RING_SECTION = 0.005
+REFLEX_RING_DEPTH = 0.016
+REFLEX_POST_HALF_WIDTH = 0.01
+REFLEX_POST_HALF_LENGTH = 0.016
+REFLEX_DOT_RADIUS = 0.004
+REFLEX_COLOR = (0.05, 0.05, 0.06, 1)
+REFLEX_DOT_COLOR = (1, 0.04, 0.04, 1)
 
 # Where the right wrist sits relative to a grip, measured from the pack's pistol pose.
 WRIST_IN_GRIP = Matrix(
@@ -104,6 +121,9 @@ VIEW_GRIP_OFFSET = (0.17, 0.36, -0.25)
 VIEW_BAZOOKA_GRIP_OFFSET = (0.18, 0.4, -0.27)
 VIEW_YAW_DEG = 5
 VIEW_FOV_DEG = 60
+# Must match VIEWMODEL_SIGHT_DISTANCE in client/render.ts: how far ahead of the eye the rear sight
+# sits when aiming, so the preview shows the sight picture the game will.
+VIEW_SIGHT_DISTANCE = 0.22
 # The first-person arms have no body, so their shoulders move forward to reach the rifle.
 VIEW_SHOULDER_SHIFT = {"R": Vector((0, -0.1, -0.05)), "L": Vector((-0.08, -0.2, -0.2))}
 EYE_OFFSET = Vector((0, -0.09, 0.08))
@@ -143,6 +163,23 @@ def empty(name, matrix):
     bpy.context.scene.collection.objects.link(obj)
     obj.matrix_world = matrix
     return obj
+
+
+def sight_frame(rear, front):
+    """A frame at `rear` whose +Y looks along the sight line to `front` and whose +Z is the gun's
+    up: a camera pose that sees the sights lined up, which the exporter turns into three.js
+    camera space (forward -Z, up +Y) like everything else in the viewmodel."""
+    forward = (front - rear).normalized()
+    up = (UP - UP.dot(forward) * forward).normalized()
+    right = forward.cross(up)
+    return Matrix(
+        (
+            (right.x, forward.x, up.x, rear.x),
+            (right.y, forward.y, up.y, rear.y),
+            (right.z, forward.z, up.z, rear.z),
+            (0, 0, 0, 1),
+        )
+    )
 
 
 def solve_arm(armature, side, wrist_matrix, pole_location):
@@ -191,11 +228,11 @@ def mirror_fingers(armature):
     update()
 
 
-def _colored_object(name, verts, faces, color, bone):
+def _colored_object(name, verts, faces, color, bone=None):
     """A standalone mesh object from raw geometry, built without bpy.ops so it works the same in
-    background mode, weighted entirely to `bone` so it rides along once joined into a character.
-    Normals are recalculated rather than trusted, since the winding above is whatever was
-    convenient to write."""
+    background mode, weighted entirely to `bone` (if given) so it rides along once joined into a
+    character. Normals are recalculated rather than trusted, since the winding above is whatever
+    was convenient to write."""
     mesh = bpy.data.meshes.new(name)
     mesh.from_pydata(verts, [], faces)
     mesh.update()
@@ -210,7 +247,8 @@ def _colored_object(name, verts, faces, color, bone):
     mesh.materials.append(material)
     obj = bpy.data.objects.new(name, mesh)
     bpy.context.scene.collection.objects.link(obj)
-    obj.vertex_groups.new(name=bone).add(list(range(len(verts))), 1.0, "REPLACE")
+    if bone:
+        obj.vertex_groups.new(name=bone).add(list(range(len(verts))), 1.0, "REPLACE")
     return obj
 
 
@@ -426,11 +464,68 @@ def build_gun(file_name, name, scale, yaw_deg, offset=Vector()):
 
 
 def build_rifle():
-    return build_gun("AssaultRifle2_1.blend", "Rifle", RIFLE_SCALE, -90)
+    rifle = build_gun("AssaultRifle2_1.blend", "Rifle", RIFLE_SCALE, -90)
+    return mount_reflex_sight(rifle, RIFLE_REFLEX)
 
 
 def build_smg():
-    return build_gun("SubmachineGun_2.blend", "Smg", SMG_SCALE, -90)
+    smg = build_gun("SubmachineGun_2.blend", "Smg", SMG_SCALE, -90)
+    return mount_reflex_sight(smg, SMG_REFLEX)
+
+
+def reflex_centre(mount):
+    """The middle of the ring, where the dot floats and the eye looks through."""
+    return mount + UP * REFLEX_HEIGHT
+
+
+def reflex_sight_line(mount):
+    centre = reflex_centre(mount)
+    return centre, centre + FORWARD
+
+
+def mount_reflex_sight(gun, mount):
+    """Joins the sight's post and ring onto a gun (grip at the origin, barrel along -Y)."""
+    cx, cy, cz = reflex_centre(mount)
+    hw, hl = REFLEX_POST_HALF_WIDTH, REFLEX_POST_HALF_LENGTH
+    top = cz - REFLEX_RING_RADIUS
+    post = _colored_object(
+        "ReflexPost",
+        [(cx + x, cy + y, z) for z in (mount.z, top) for x, y in ((-hw, -hl), (hw, -hl), (hw, hl), (-hw, hl))],
+        [(0, 1, 2, 3), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)],
+        REFLEX_COLOR,
+    )
+    sides = 16
+    inner = REFLEX_RING_RADIUS - REFLEX_RING_SECTION
+    outer = REFLEX_RING_RADIUS + REFLEX_RING_SECTION
+    front, back = cy - REFLEX_RING_DEPTH / 2, cy + REFLEX_RING_DEPTH / 2
+    verts = []
+    for k in range(sides):
+        c, s = math.cos(2 * math.pi * k / sides), math.sin(2 * math.pi * k / sides)
+        for r, y in ((inner, front), (outer, front), (outer, back), (inner, back)):
+            verts.append((cx + c * r, y, cz + s * r))
+    faces = []
+    for k in range(sides):
+        a, b = k * 4, ((k + 1) % sides) * 4
+        for i, j in ((0, 1), (1, 2), (2, 3), (3, 0)):
+            faces.append((a + i, a + j, b + j, b + i))
+    ring = _colored_object("ReflexRing", verts, faces, REFLEX_COLOR)
+    for part in (post, ring):
+        flatten_materials(part)
+    return join([gun, post, ring])
+
+
+def reflex_dot(name, frame, mount):
+    """The dot at the ring's centre, in its own material group so the game draws it unlit."""
+    cx, cy, cz = reflex_centre(mount)
+    sides = 8
+    verts = [
+        (cx + math.cos(2 * math.pi * k / sides) * REFLEX_DOT_RADIUS, cy, cz + math.sin(2 * math.pi * k / sides) * REFLEX_DOT_RADIUS)
+        for k in range(sides)
+    ]
+    dot = _colored_object(name, verts, [tuple(range(sides))], REFLEX_DOT_COLOR)
+    flatten_materials(dot, group_of=lambda _name: "Dot")
+    dot.matrix_world = frame
+    return dot
 
 
 def build_bazooka():
@@ -539,7 +634,8 @@ def pose_hands(armature, frame, handguard):
 
 def build_viewmodel(armature, soldier, rifle):
     """The first-person arms and weapons. Each weapon gets its own hand pose and so its own copy
-    of the arms; the client shows one weapon and its arms at a time."""
+    of the arms; the client shows one weapon and its arms at a time. Each also gets a muzzle
+    empty and, if it has sights, a sight empty, for the client to line things up on."""
     eye = eye_matrix(armature).translation
     bones = armature.pose.bones
     for side, shift in VIEW_SHOULDER_SHIFT.items():
@@ -547,15 +643,16 @@ def build_viewmodel(armature, soldier, rifle):
         shoulder.matrix = Matrix.Translation(shift) @ shoulder.matrix
         update()
 
+    # The launcher has no sight: aiming it only narrows the view.
     weapons = [
-        ("Rifle", rifle, VIEW_GRIP_OFFSET, RIFLE_HANDGUARD, RIFLE_MUZZLE),
-        ("Smg", build_smg(), VIEW_GRIP_OFFSET, SMG_HANDGUARD, SMG_MUZZLE),
-        ("Bazooka", build_bazooka(), VIEW_BAZOOKA_GRIP_OFFSET, BAZOOKA_HANDGUARD, BAZOOKA_MUZZLE),
+        ("Rifle", rifle, VIEW_GRIP_OFFSET, RIFLE_HANDGUARD, RIFLE_MUZZLE, RIFLE_REFLEX),
+        ("Smg", build_smg(), VIEW_GRIP_OFFSET, SMG_HANDGUARD, SMG_MUZZLE, SMG_REFLEX),
+        ("Bazooka", build_bazooka(), VIEW_BAZOOKA_GRIP_OFFSET, BAZOOKA_HANDGUARD, BAZOOKA_MUZZLE, None),
     ]
     arms = []
     view_weapons = []
-    muzzles = []
-    for name, source, grip_offset, handguard, muzzle_point in weapons:
+    points = []
+    for name, source, grip_offset, handguard, muzzle_point, reflex in weapons:
         right, forward, up = grip_offset
         grip = eye + RIGHT * right + FORWARD * forward + UP * up
         frame = Matrix.Translation(grip) @ Matrix.Rotation(math.radians(VIEW_YAW_DEG), 4, "Z")
@@ -569,20 +666,24 @@ def build_viewmodel(armature, soldier, rifle):
         bpy.context.scene.collection.objects.link(view_weapon)
         view_weapon.name = f"View{name}"
         view_weapon.matrix_world = frame
+        if reflex is not None:
+            view_weapon = join([view_weapon, reflex_dot(f"Dot{name}", frame, reflex)])
         view_weapons.append(view_weapon)
         # The rifle source is still needed for the third-person soldier; the others are not.
         if source is not rifle:
             bpy.data.objects.remove(source)
-        muzzles.append(empty(f"Muzzle{name}", frame @ Matrix.Translation(muzzle_point)))
+        points.append(empty(f"Muzzle{name}", frame @ Matrix.Translation(muzzle_point)))
+        if reflex is not None:
+            points.append(empty(f"Sight{name}", frame @ sight_frame(*reflex_sight_line(reflex))))
 
     # Camera space: the eye at the origin, forward along +Y and up along +Z, which the glTF
     # exporter turns into three.js camera space (forward -Z, up +Y).
     to_camera = Matrix.Rotation(math.pi, 4, "Z") @ Matrix.Translation(-eye)
-    for obj in (*arms, *view_weapons, *muzzles):
+    for obj in (*arms, *view_weapons, *points):
         obj.matrix_world = to_camera @ obj.matrix_world
     for obj in (*arms, *view_weapons):
         apply_transform(obj)
-    return arms, view_weapons, muzzles
+    return arms, view_weapons, points
 
 
 def build_grenade():
@@ -694,20 +795,29 @@ def main():
             render_preview(f"{name}_back", camera_looking(Vector((0.9, 1.8, 1.9)), target), lens=35)
 
     # The viewmodel comes first: exporting animations leaves the armature in some other pose.
-    arms, view_weapons, muzzles = build_viewmodel(armature, king, rifle)
+    arms, view_weapons, points = build_viewmodel(armature, king, rifle)
     if PREVIEW:
         king.hide_render = True
         general.hide_render = True
         rifle.hide_render = True
         eye_camera = Matrix.Rotation(math.radians(90), 4, "X")
+        sights = {obj.name: obj for obj in points if obj.name.startswith("Sight")}
         for shown_arms, shown_weapon in zip(arms, view_weapons):
             for obj in (*arms, *view_weapons):
                 obj.hide_render = obj not in (shown_arms, shown_weapon)
-            name = shown_weapon.name[len("View") :].lower()
-            render_preview(f"viewmodel_{name}", eye_camera, lens=VIEW_FOV_DEG)
+            name = shown_weapon.name[len("View") :]
+            render_preview(f"viewmodel_{name.lower()}", eye_camera, lens=VIEW_FOV_DEG)
+            sight = sights.get(f"Sight{name}")
+            if sight is None:
+                continue
+            # The eye behind the rear sight, looking along the sight line: what aiming shows.
+            aim_camera = (
+                sight.matrix_world @ Matrix.Translation((0, -VIEW_SIGHT_DISTANCE, 0)) @ eye_camera
+            )
+            render_preview(f"viewmodel_{name.lower()}_ads", aim_camera, lens=VIEW_FOV_DEG)
         return
-    export_glb("viewmodel.glb", [*arms, *view_weapons, *muzzles])
-    for obj in (*arms, *view_weapons, *muzzles):
+    export_glb("viewmodel.glb", [*arms, *view_weapons, *points])
+    for obj in (*arms, *view_weapons, *points):
         bpy.data.objects.remove(obj)
     export_character(armature, [king, general], rifle, rifle_frame)
     export_glb("grenade.glb", [build_grenade()])

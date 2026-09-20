@@ -550,6 +550,7 @@
       height: 30px;
       margin: -15px 0 0 -15px;
       filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.95)) drop-shadow(0 0 6px rgba(255, 255, 255, 0.65));
+      transition: opacity 0.1s;
     }
 
     #crosshair::before,
@@ -576,6 +577,7 @@
     }
 
     #crosshair.ads { transform: scale(0.58); }
+    #crosshair.sighted { opacity: 0; }
     #crosshair.sprinting { opacity: 0.35; transform: scale(1.65); }
 
     /* Hitmarker */

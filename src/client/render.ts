@@ -3,6 +3,8 @@ import {
   BackSide,
   Color,
   DirectionalLight,
+  DoubleSide,
+  Euler,
   Float32BufferAttribute,
   Fog,
   Group,
@@ -13,9 +15,10 @@ import {
   MeshLambertMaterial,
   type Object3D,
   PerspectiveCamera,
+  Quaternion,
   Scene,
   SphereGeometry,
-  type Vector3,
+  Vector3,
   WebGLRenderer,
 } from "three";
 import {
@@ -62,6 +65,10 @@ const VIEWMODEL_BOB_UP = 0.007;
 const VIEWMODEL_SWAY = 0.04;
 const VIEWMODEL_SWAY_MAX = 0.03;
 const VIEWMODEL_SWAY_RECOVERY_PER_SEC = 10;
+// Aiming down the sights brings the rear sight this far in front of the eye, on the camera's
+// axis, and the walk bob nearly dies away so the sight picture holds still.
+const VIEWMODEL_SIGHT_DISTANCE = 0.22;
+const VIEWMODEL_ADS_BOB = 0.25;
 // Where a reload brings the weapon (client/reload.ts times it): a gun drops, comes in towards the
 // chest and rolls its magazine well up into view; the launcher is tipped forward off the shoulder.
 const VIEWMODEL_RELOAD_DROP = 0.06;
@@ -85,13 +92,16 @@ const viewmodel = new Group();
 viewmodelCamera.add(viewmodel);
 // One mesh, one muzzle point and one copy of the arms (posed for that grip) per weapon id (see
 // WEAPON in shared/weapons.ts), all loaded up front and swapped by visibility so switching weapons
-// never touches the network or reloads assets.
+// never touches the network or reloads assets. Weapons with iron sights also carry a sight point:
+// a camera pose at the rear sight looking along the sight line, which aiming lines up on the eye.
 const VIEW_WEAPON_NAMES = ["ViewRifle", "ViewSmg", "ViewBazooka"];
 const VIEW_MUZZLE_NAMES = ["MuzzleRifle", "MuzzleSmg", "MuzzleBazooka"];
 const VIEW_ARMS_NAMES = ["ArmsRifle", "ArmsSmg", "ArmsBazooka"];
+const VIEW_SIGHT_NAMES = ["SightRifle", "SightSmg", "SightBazooka"];
 const viewWeapons: Object3D[] = [];
 const viewMuzzles: Object3D[] = [];
 const viewArms: Object3D[] = [];
+const viewSights: Object3D[] = [];
 let currentWeapon = 0;
 let viewmodelKick = 0;
 let bobPhase = 0;
@@ -99,7 +109,13 @@ let swayX = 0;
 let swayY = 0;
 let lastYaw = 0;
 let lastPitch = 0;
+/** 0 at the hip, 1 with the sights on the eye, sliding between as aiming starts and stops. */
+let adsBlend = 0;
 let cameraFov = FIELD_OF_VIEW_DEG;
+const aimPosition = new Vector3();
+const aimQuaternion = new Quaternion();
+const baseQuaternion = new Quaternion();
+const motionEuler = new Euler();
 
 const sky = new Mesh(
   new SphereGeometry(SKY_RADIUS, 32, 16),
@@ -108,6 +124,13 @@ const sky = new Mesh(
 
 let renderer: WebGLRenderer | null = null;
 const litMaterial = new MeshLambertMaterial({ vertexColors: true });
+// The reflex sights' dots glow: pure vertex colour, no lighting or tone mapping to dull them, and
+// seen from either side since the disc faces the eye only when aiming.
+const dotMaterial = new MeshBasicMaterial({
+  vertexColors: true,
+  toneMapped: false,
+  side: DoubleSide,
+});
 
 export function initRenderer(canvas: HTMLCanvasElement, assets: Assets): void {
   renderer = new WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
@@ -135,9 +158,21 @@ export function initRenderer(canvas: HTMLCanvasElement, assets: Assets): void {
     if (muzzleIndex !== -1) viewMuzzles[muzzleIndex] = object;
     const armsIndex = VIEW_ARMS_NAMES.indexOf(object.name);
     if (armsIndex !== -1) viewArms[armsIndex] = object;
-    if (object instanceof Mesh) object.material = litMaterial;
+    const sightIndex = VIEW_SIGHT_NAMES.indexOf(object.name);
+    if (sightIndex !== -1) viewSights[sightIndex] = object;
+    if (!(object instanceof Mesh)) return;
+    // Safe: the loader gives every mesh a material, named as art/player.py grouped its faces.
+    const source = object.material as Material;
+    object.material = source.name === "Dot" ? dotMaterial : litMaterial;
   });
-  for (let i = 0; i < VIEW_WEAPON_NAMES.length; i++) showViewmodelWeapon(i, i === currentWeapon);
+  for (let i = 0; i < VIEW_WEAPON_NAMES.length; i++) {
+    showViewmodelWeapon(i, i === currentWeapon);
+    if (weaponDefinition(i).ironSights && !viewSights[i]) {
+      throw new Error(
+        `viewmodel.glb has no ${VIEW_SIGHT_NAMES[i]}; rebuild it (npm run art -- player)`,
+      );
+    }
+  }
 }
 
 function showViewmodelWeapon(weapon: number, visible: boolean): void {
@@ -272,7 +307,8 @@ export function kickViewmodel(strength: number): void {
   viewmodelKick = strength;
 }
 
-/** Recoil, walking bob, a little lag behind mouse movement, and the reload's motion on top. */
+/** Recoil, walking bob, a little lag behind mouse movement, and the reload's motion on top; all
+ * of it on a base pose that slides from the hip to the sights lined up on the eye while aiming. */
 export function updateViewmodel(
   dt: number,
   distanceMoved: number,
@@ -303,22 +339,37 @@ export function updateViewmodel(
   );
   lastYaw = yaw;
   lastPitch = pitch;
+  const sight = viewSights[currentWeapon];
+  const aiming = ads && sight !== undefined;
+  adsBlend += ((aiming ? 1 : 0) - adsBlend) * (1 - Math.exp(-ADS_TRANSITION_PER_SEC * dt));
+  const bob = moving * (1 - adsBlend * (1 - VIEWMODEL_ADS_BOB));
   const launcher = weaponDefinition(currentWeapon).projectile !== null;
   const lowered = reload.lower;
   viewmodel.position.set(
-    Math.cos(bobPhase) * VIEWMODEL_BOB_SIDE * moving + swayX + reload.x,
-    -Math.abs(Math.sin(bobPhase)) * VIEWMODEL_BOB_UP * moving +
+    Math.cos(bobPhase) * VIEWMODEL_BOB_SIDE * bob + swayX + reload.x,
+    -Math.abs(Math.sin(bobPhase)) * VIEWMODEL_BOB_UP * bob +
       swayY -
       lowered * (launcher ? VIEWMODEL_LAUNCHER_RELOAD_DROP : VIEWMODEL_RELOAD_DROP) +
       reload.y,
     viewmodelKick * VIEWMODEL_RECOIL_BACK + lowered * VIEWMODEL_RELOAD_BACK + reload.z,
   );
-  viewmodel.rotation.x =
+  motionEuler.set(
     viewmodelKick * VIEWMODEL_RECOIL_RISE +
-    lowered * (launcher ? VIEWMODEL_LAUNCHER_RELOAD_PITCH : VIEWMODEL_RELOAD_PITCH) +
-    reload.pitch;
-  viewmodel.rotation.z =
-    lowered * (launcher ? VIEWMODEL_LAUNCHER_RELOAD_ROLL : VIEWMODEL_RELOAD_ROLL);
+      lowered * (launcher ? VIEWMODEL_LAUNCHER_RELOAD_PITCH : VIEWMODEL_RELOAD_PITCH) +
+      reload.pitch,
+    0,
+    lowered * (launcher ? VIEWMODEL_LAUNCHER_RELOAD_ROLL : VIEWMODEL_RELOAD_ROLL),
+  );
+  viewmodel.quaternion.setFromEuler(motionEuler);
+  if (sight === undefined || adsBlend < 0.001) return;
+  // The pose that moves the sight point onto the camera's axis, VIEWMODEL_SIGHT_DISTANCE ahead:
+  // undo the sight's own rotation, then carry what is left of its offset back to the eye.
+  aimQuaternion.copy(sight.quaternion).invert();
+  aimPosition.copy(sight.position).applyQuaternion(aimQuaternion).negate();
+  aimPosition.z -= VIEWMODEL_SIGHT_DISTANCE;
+  baseQuaternion.identity().slerp(aimQuaternion, adsBlend);
+  viewmodel.quaternion.premultiply(baseQuaternion);
+  viewmodel.position.applyQuaternion(baseQuaternion).addScaledVector(aimPosition, adsBlend);
 }
 
 /** Compiles every shader and uploads every texture now, so nothing stutters the first time it

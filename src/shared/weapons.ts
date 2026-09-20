@@ -44,6 +44,9 @@ export type WeaponDefinition = {
   movementMultiplier: number;
   /** Scales the first-person kick and camera flash when fired. */
   recoil: number;
+  /** Aiming raises the weapon to the eye and lines its sights up on the centre of the screen
+   * (a `Sight` point exported by art/player.py). Without them, aiming only narrows the view. */
+  ironSights: boolean;
   /** Set for weapons that fire simulated rounds instead of instant hitscan shots. */
   projectile: ProjectileDefinition | null;
 };
@@ -75,6 +78,7 @@ export const WEAPON_DEFINITIONS: readonly [WeaponDefinition, WeaponDefinition, W
     reserve: Number.POSITIVE_INFINITY,
     movementMultiplier: 1,
     recoil: 1,
+    ironSights: true,
     projectile: null,
   },
   // Close range, fast: matches the rifle's time to kill inside 25 m (four rounds; at 60 Hz the
@@ -95,6 +99,7 @@ export const WEAPON_DEFINITIONS: readonly [WeaponDefinition, WeaponDefinition, W
     reserve: Number.POSITIVE_INFINITY,
     movementMultiplier: 1.15,
     recoil: 0.55,
+    ironSights: true,
     projectile: null,
   },
   // Heavy: one slow rocket at a time, three per life, splash that reaches round cover.
@@ -114,6 +119,7 @@ export const WEAPON_DEFINITIONS: readonly [WeaponDefinition, WeaponDefinition, W
     reserve: Number.POSITIVE_INFINITY,
     movementMultiplier: 0.75,
     recoil: 2.2,
+    ironSights: false,
     projectile: {
       speed: 25,
       directDamage: 150,

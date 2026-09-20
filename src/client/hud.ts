@@ -412,7 +412,9 @@ export function setWeapon(
       slot.classList.toggle("selected", Number((slot as HTMLElement).dataset.weapon) === weapon);
     }
   }
+  // Through iron sights the weapon itself is the crosshair.
   crosshair.classList.toggle("ads", ads);
+  crosshair.classList.toggle("sighted", ads && weaponDefinition(weapon).ironSights);
   crosshair.classList.toggle("sprinting", sprinting);
 }
 
